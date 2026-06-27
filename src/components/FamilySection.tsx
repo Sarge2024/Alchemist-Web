@@ -380,11 +380,21 @@ export default function FamilySection({
                     />
                   </div>
 
-                  <div className="flex justify-between items-center text-[10px] font-sans font-semibold pt-2 border-t border-outline-variant/20">
-                    <span className="text-scientific-gray">Email</span>
-                    <span className="text-primary truncate max-w-[150px]">{editingProfile.email}</span>
+                  {/* Email */}
+                  <div>
+                    <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="Ex: usuario@email.com"
+                      value={editingProfile.email || ""}
+                      onChange={(e) => setEditingProfile({ ...editingProfile, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs"
+                    />
                   </div>
-                  <div className="flex justify-between items-center text-[10px] font-sans font-semibold">
+
+                  <div className="flex justify-between items-center text-[10px] font-sans font-semibold pt-2 border-t border-outline-variant/20">
                     <span className="text-scientific-gray">Conta Principal</span>
                     <span className="text-primary">{editingProfile.isMainAccount ? "Sim" : "Não"}</span>
                   </div>
