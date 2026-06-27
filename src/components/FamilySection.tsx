@@ -229,7 +229,7 @@ export default function FamilySection({
                   {/* WhatsApp Action Button */}
                   {p.phone && p.phone.trim() !== "" && (
                     <a
-                      href={`https://wa.me/${p.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${p.name}, aqui é do Alchemist Web!`)}`}
+                      href={`https://wa.me/${p.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${p.name}, acesse seu perfil no Alchemist Web através deste link: https://alchemist-web-psi.vercel.app/`)}`}
                       target="_blank"
                       rel="noreferrer"
                       className="mb-4 flex items-center justify-center gap-2 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] py-2 px-3 rounded-lg border border-[#25D366]/30 transition-colors text-xs font-semibold"
