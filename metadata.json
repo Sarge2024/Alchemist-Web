@@ -1,0 +1,6 @@
+{
+  "name": "Alchemist Web",
+  "description": "Nutritional laboratory planner, including molecular gastronomy recipes, customizable shopping list, family members biometric profile management, and daily biological consumption history tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
