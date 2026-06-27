@@ -1,15 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, SlidersHorizontal, PlusCircle, Check, Info } from "lucide-react";
-import { preloadedRecipes } from "../data/recipes";
 import { Recipe } from "../types";
+import { dishAlchemistsService, DishRecipe } from "../services/dishAlchemistsService";
 
 export default function RecipeList() {
   const [searchQuery, setSearchInput] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("TODAS");
   const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
+  
+  // Estado para armazenar as receitas vindas da API
+  const [apiRecipes, setApiRecipes] = useState<Recipe[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const categories = ["TODAS", "ALTA PROTEÍNA", "CETOGÊNICA", "BAIXO CARBO", "VEGAN", "SEM AÇÚCAR"];
+
+  useEffect(() => {
+    async function loadRecipes() {
+      setLoading(true);
+      try {
+        const data: DishRecipe[] = await dishAlchemistsService.getRecipes();
+        
+        // Mapeando do formato DishRecipe (API) para o formato Recipe (UI local)
+        const mappedRecipes: Recipe[] = data.map(apiRecipe => ({
+          id: apiRecipe.id,
+          name: apiRecipe.title,
+          description: apiRecipe.description,
+          category: apiRecipe.category,
+          calories: apiRecipe.total_nutrition?.calories || 0,
+          protein: apiRecipe.total_nutrition?.protein || 0,
+          carbs: apiRecipe.total_nutrition?.carbs || 0,
+          fat: apiRecipe.total_nutrition?.fat || 0,
+          image: apiRecipe.image_url,
+          tags: [apiRecipe.category]
+        }));
+        
+        setApiRecipes(mappedRecipes);
+      } catch (err) {
+        console.error("Erro ao carregar receitas:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadRecipes();
+  }, []);
 
   const handleAddRecipe = (recipeId: string) => {
     setAddedRecipeId(recipeId);
@@ -18,7 +53,7 @@ export default function RecipeList() {
     }, 3000);
   };
 
-  const filteredRecipes = preloadedRecipes.filter((recipe) => {
+  const filteredRecipes = apiRecipes.filter((recipe) => {
     const matchesSearch =
       recipe.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (recipe.description && recipe.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -28,6 +63,14 @@ export default function RecipeList() {
 
     return matchesSearch && matchesCategory;
   });
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
