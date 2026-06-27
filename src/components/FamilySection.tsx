@@ -26,6 +26,7 @@ export default function FamilySection({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [newDependentName, setNewDependentName] = useState("");
+  const [newDependentEmail, setNewDependentEmail] = useState("");
   const [newDependentRelationship, setNewDependentRelationship] = useState("");
   const [newDependentRole, setNewDependentRole] = useState("Dependente");
   const [isAdding, setIsAdding] = useState(false);
@@ -107,6 +108,7 @@ export default function FamilySection({
       const { userService } = await import("../services/userService");
       const newProfile = await userService.addDependent(familyId, {
         name: newDependentName,
+        email: newDependentEmail,
         relationship: newDependentRelationship,
         role: newDependentRole,
       });
@@ -116,6 +118,7 @@ export default function FamilySection({
       
       // Reset form
       setNewDependentName("");
+      setNewDependentEmail("");
       setNewDependentRelationship("");
       setNewDependentRole("Dependente");
       setMode("list");
@@ -714,6 +717,19 @@ export default function FamilySection({
                   value={newDependentName}
                   onChange={(e) => setNewDependentName(e.target.value)}
                   placeholder="Ex: Maria Eduarda"
+                  className="w-full px-4 py-2.5 bg-white border border-outline-variant/50 rounded-lg outline-none font-sans text-xs text-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-scientific-gray font-semibold mb-1 text-[10px] uppercase tracking-wider font-sans">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={newDependentEmail}
+                  onChange={(e) => setNewDependentEmail(e.target.value)}
+                  placeholder="Ex: maria.eduarda@email.com (Opcional)"
                   className="w-full px-4 py-2.5 bg-white border border-outline-variant/50 rounded-lg outline-none font-sans text-xs text-primary"
                 />
               </div>
