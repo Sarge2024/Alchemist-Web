@@ -88,14 +88,25 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           <Dashboard
             currentProfile={currentProfile}
             onNavigateToView={(view) => setActiveView(view)}
+            familyId={familyId}
+            activeProfileId={activeProfileId}
           />
         );
       case ActiveView.PLANNER:
-        return <WeeklyPlanner />;
+        return (
+          <WeeklyPlanner 
+            familyId={familyId}
+            activeProfileId={activeProfileId}
+          />
+        );
       case ActiveView.RECIPES:
         return <RecipeList />;
       case ActiveView.SHOPPING:
-        return <ShoppingList />;
+        return (
+          <ShoppingList 
+            familyId={familyId}
+          />
+        );
       case ActiveView.FAMILY:
         return (
           <FamilySection
@@ -107,7 +118,12 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           />
         );
       case ActiveView.HISTORY:
-        return <ConsumptionHistory />;
+        return (
+          <ConsumptionHistory 
+            familyId={familyId}
+            activeProfileId={activeProfileId}
+          />
+        );
       default:
         return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} />;
     }

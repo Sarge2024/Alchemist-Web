@@ -1,25 +1,26 @@
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Calendar, ChevronLeft, ChevronRight, Plus, Check, Search, Coffee, Cookie, Clock, Apple } from "lucide-react";
-import { LogEntry } from "../types";
+import { Plus, Trash2, Search, Zap, Droplet, Apple, Clock, ChevronLeft, ChevronRight, Activity, CalendarDays, Check, Calendar, Cookie, Coffee } from "lucide-react";
+import { LogEntry, ConsumptionLogDoc } from "../types";
+import { consumptionService } from "../services/consumptionService";
 
-export default function ConsumptionHistory() {
-  const [currentDate, setCurrentDate] = useState<string>("Terça-feira, 24 de Outubro");
+interface ConsumptionHistoryProps {
+  familyId: string | null;
+  activeProfileId: string | null;
+}
+
+export default function ConsumptionHistory({ familyId, activeProfileId }: ConsumptionHistoryProps) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [entries, setEntries] = useState<LogEntry[]>([]);
+  const [logDocId, setLogDocId] = useState<string>("");
+  const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Chronological consumption logs
-  const [logs, setLogs] = useState<LogEntry[]>([
-    { id: "log-1", time: "08:30", foodName: "Aveia com Proteína Hidrolisada", category: "Planejado", details: "Porção individual otimizada de aveia integral com chia e whey", calories: 350 },
-    { id: "log-2", time: "11:00", foodName: "Tônico de Extrato de Clorofila", category: "Planejado", details: "Suco verde prensado a frio com abacate", calories: 280 },
-    { id: "log-3", time: "13:15", foodName: "Prato Macro-Balanceado de Frango", category: "Planejado", details: "Peito de frango grelhado com arroz selvagem e brócolis", calories: 550 },
-    { id: "log-4", time: "16:00", foodName: "Maçã Verde com Amêndoas", category: "Ocasional", details: "Lanche rápido rico em fibras e gorduras boas", calories: 190 },
-  ]);
-
-  // Eventual meal logging form states
+  // Form states
   const [searchFoodQuery, setSearchFoodQuery] = useState<string>("");
-  const [loggedQuantity, setLoggedQuantity] = useState<number>(2);
+  const [loggedQuantity, setLoggedQuantity] = useState<number>(1);
   const [loggedUnit, setLoggedUnit] = useState<string>("Unidades");
-  const [loggedTime, setLoggedTime] = useState<string>("16:15");
+  const [loggedTime, setLoggedTime] = useState<string>(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
   const [loggedCategory, setLoggedCategory] = useState<string>("Lanche");
 
   // Mock database for eventual search items
@@ -30,6 +31,66 @@ export default function ConsumptionHistory() {
     { name: "Iogurte Natural Puro de Cabra", calPerUnit: 110, detail: "Iogurte de alta digestibilidade" },
   ];
 
+  useEffect(() => {
+    async function loadData() {
+      if (!familyId || !activeProfileId) return;
+      setLoading(true);
+      try {
+        const dateId = consumptionService.formatDateId(currentDate);
+        setLogDocId(dateId);
+        const doc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
+        if (doc) {
+          setEntries(doc.entries);
+        } else {
+          setEntries([]);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [currentDate, familyId, activeProfileId]);
+
+  const saveEntries = async (newEntries: LogEntry[]) => {
+    if (!familyId || !activeProfileId) return;
+    try {
+      const dateId = consumptionService.formatDateId(currentDate);
+      const logDoc: ConsumptionLogDoc = {
+        id: dateId,
+        familyId,
+        profileId: activeProfileId,
+        entries: newEntries,
+        totalCalories: newEntries.reduce((acc, curr) => acc + curr.calories, 0),
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0
+      };
+      await consumptionService.saveDayLogs(logDoc);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const prevDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setCurrentDate(newDate);
+  };
+
+  const nextDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setCurrentDate(newDate);
+  };
+
+  const removeEntry = (id: string) => {
+    const newEntries = entries.filter((e) => e.id !== id);
+    setEntries(newEntries);
+    saveEntries(newEntries);
+  };
+
   const handleSelectPreset = (foodName: string) => {
     setSearchFoodQuery(foodName);
   };
@@ -38,11 +99,10 @@ export default function ConsumptionHistory() {
     e.preventDefault();
     if (!searchFoodQuery.trim()) return;
 
-    // Estimate calories based on query match or default
     const match = presetFoodDatabase.find(
       (f) => f.name.toLowerCase() === searchFoodQuery.toLowerCase()
     );
-    const unitCal = match ? match.calPerUnit : 80; // default estimated calories
+    const unitCal = match ? match.calPerUnit : 80;
     const calculatedCal = unitCal * loggedQuantity;
 
     const newLog: LogEntry = {
@@ -54,23 +114,34 @@ export default function ConsumptionHistory() {
       calories: calculatedCal,
     };
 
-    setLogs((prev) => [newLog, ...prev]);
+    const newEntries = [newLog, ...entries];
+    setEntries(newEntries);
+    saveEntries(newEntries);
+    
     setSearchFoodQuery("");
-    setToastMessage(`Consumo de "${newLog.foodName}" registrado com sucesso!`);
+    setToastMessage(`Consumo de "${newLog.foodName}" registrado!`);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Calculate live cumulative sum metrics for stats gauges
-  const totalCalories = logs.reduce((sum, item) => sum + item.calories, 0);
-  const targetCalories = 2200;
+  const totalCalories = entries.reduce((sum, item) => sum + item.calories, 0);
+  const targetCalories = 2450;
   const calPercent = Math.min(Math.round((totalCalories / targetCalories) * 100), 100);
 
-  // Live estimated calorie calculation for custom form preview
   const activeMatch = presetFoodDatabase.find(
     (f) => f.name.toLowerCase() === searchFoodQuery.toLowerCase()
   );
   const currentUnitCal = activeMatch ? activeMatch.calPerUnit : 80;
   const liveCaloriePreview = currentUnitCal * loggedQuantity;
+  
+  const dateStr = currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' });
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -106,13 +177,13 @@ export default function ConsumptionHistory() {
 
         {/* Date Selector */}
         <div className="flex items-center gap-2 bg-lab-white p-1 rounded-xl border border-outline-variant/40 shadow-sm">
-          <button className="w-9 h-9 flex items-center justify-center hover:bg-sage-wash rounded-lg text-primary transition-colors focus:outline-none">
+          <button onClick={prevDay} className="w-9 h-9 flex items-center justify-center hover:bg-sage-wash rounded-lg text-primary transition-colors focus:outline-none cursor-pointer">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="px-4 font-serif text-sm font-semibold text-primary flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-secondary" /> {currentDate}
+          <span className="px-4 font-serif text-sm font-semibold text-primary flex items-center gap-2 capitalize">
+            <Calendar className="w-4 h-4 text-secondary" /> {dateStr}
           </span>
-          <button className="w-9 h-9 flex items-center justify-center hover:bg-sage-wash rounded-lg text-primary transition-colors focus:outline-none">
+          <button onClick={nextDay} className="w-9 h-9 flex items-center justify-center hover:bg-sage-wash rounded-lg text-primary transition-colors focus:outline-none cursor-pointer">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
@@ -213,52 +284,63 @@ export default function ConsumptionHistory() {
         {/* Left Side: Chronological Consume Logs */}
         <div className="lg:col-span-7 space-y-4">
           <h3 className="font-serif text-md font-bold text-primary flex items-center gap-2 mb-2">
-            <Clock className="w-4.5 h-4.5 text-secondary" /> Diário de Consumo de Hoje
+            <Clock className="w-4.5 h-4.5 text-secondary" /> Diário de Consumo
           </h3>
 
-          <div className="relative border-l border-outline-variant/30 pl-4 ml-2.5 space-y-6">
-            <AnimatePresence>
-              {logs.map((log) => (
-                <motion.div
-                  key={log.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="relative group"
-                >
-                  {/* Bullet indicator */}
-                  <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full border border-primary bg-white group-hover:bg-primary transition-colors" />
+          {entries.length === 0 ? (
+            <div className="text-center py-10 bg-lab-white rounded-xl border border-dashed border-outline-variant/40">
+              <span className="text-scientific-gray font-sans text-sm">Nenhum consumo registrado neste dia.</span>
+            </div>
+          ) : (
+            <div className="relative border-l border-outline-variant/30 pl-4 ml-2.5 space-y-6">
+              <AnimatePresence>
+                {entries.map((log) => (
+                  <motion.div
+                    key={log.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="relative group"
+                  >
+                    {/* Bullet indicator */}
+                    <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full border border-primary bg-white group-hover:bg-primary transition-colors" />
 
-                  <div className="bg-lab-white/40 border border-outline-variant/20 hover:border-outline-variant/50 rounded-xl p-4 shadow-sm flex justify-between items-start transition-all">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">
-                          {log.time}
-                        </span>
-                        <h4 className="font-sans text-sm font-semibold text-primary">
-                          {log.foodName}
-                        </h4>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase ${
-                          log.category === "Planejado"
-                            ? "bg-secondary-container text-on-secondary-container"
-                            : "bg-surface-container text-scientific-gray"
-                        }`}>
-                          {log.category}
-                        </span>
+                    <div className="bg-lab-white/40 border border-outline-variant/20 hover:border-outline-variant/50 rounded-xl p-4 shadow-sm flex justify-between items-start transition-all">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">
+                            {log.time}
+                          </span>
+                          <h4 className="font-sans text-sm font-semibold text-primary">
+                            {log.foodName}
+                          </h4>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase ${
+                            log.category === "Planejado"
+                              ? "bg-secondary-container text-on-secondary-container"
+                              : "bg-surface-container text-scientific-gray"
+                          }`}>
+                            {log.category}
+                          </span>
+                        </div>
+                        <p className="font-sans text-xs text-scientific-gray leading-relaxed">
+                          {log.details}
+                        </p>
                       </div>
-                      <p className="font-sans text-xs text-scientific-gray leading-relaxed">
-                        {log.details}
-                      </p>
-                    </div>
 
-                    <span className="font-serif text-sm font-bold text-primary ml-4">
-                      {log.calories} kcal
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="font-serif text-sm font-bold text-primary ml-4">
+                          {log.calories} kcal
+                        </span>
+                        <button onClick={() => removeEntry(log.id)} className="text-outline hover:text-error transition-colors focus:outline-none cursor-pointer">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         {/* Right Side: Eventual custom consume logger */}
@@ -359,7 +441,7 @@ export default function ConsumptionHistory() {
                   Horário
                 </label>
                 <input
-                  type="text"
+                  type="time"
                   required
                   value={loggedTime}
                   onChange={(e) => setLoggedTime(e.target.value)}

@@ -1,30 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight } from "lucide-react";
-import { Profile, Recipe } from "../types";
-import { preloadedRecipes } from "../data/recipes";
+import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight, Activity } from "lucide-react";
+import { Profile, Recipe, ConsumptionLogDoc } from "../types";
+import { consumptionService } from "../services/consumptionService";
+import { plannerService } from "../services/plannerService";
 
 interface DashboardProps {
   currentProfile: Profile;
+  familyId: string | null;
+  activeProfileId: string | null;
   onNavigateToView: (view: any) => void;
 }
 
-export default function Dashboard({ currentProfile, onNavigateToView }: DashboardProps) {
-  // Today's meal completion states
-  const [mealsCompleted, setMealsCompleted] = useState<{ [key: string]: boolean }>({
-    breakfast: true,
-    lunch: false,
-  });
-
-  // State to simulate pending approval member request
+export default function Dashboard({ currentProfile, familyId, activeProfileId, onNavigateToView }: DashboardProps) {
   const [pendingApproval, setPendingApproval] = useState<string | null>("Elena R.");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  const [currentProteinPct, setCurrentProteinPct] = useState(0);
+  const [currentFiberPct, setCurrentFiberPct] = useState(0);
+  const [currentHydrationPct, setCurrentHydrationPct] = useState(0);
+  const [todayMeals, setTodayMeals] = useState<any[]>([]);
 
-  const toggleMeal = (mealKey: string) => {
-    setMealsCompleted((prev) => ({
-      ...prev,
-      [mealKey]: !prev[mealKey],
-    }));
+  useEffect(() => {
+    async function loadDashboardData() {
+      if (!familyId || !activeProfileId) return;
+      
+      const dateId = consumptionService.formatDateId(new Date());
+      const weekId = plannerService.getCurrentWeekId();
+      
+      try {
+        // Load consumption logs for gauges
+        const logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
+        if (logDoc) {
+          // Simple estimation based on total calories if macros are not split yet
+          const totalKcal = logDoc.totalCalories;
+          // Simulation: mapping calories to macro goals (since the form currently only tracks kcal)
+          setCurrentProteinPct(Math.min(Math.round((totalKcal / 2450) * 100), 100));
+          setCurrentFiberPct(Math.min(Math.round((totalKcal / 2450) * 90), 100));
+          setCurrentHydrationPct(Math.min(Math.round((totalKcal / 2450) * 80), 100));
+        }
+        
+        // Load today's plan
+        const plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
+        if (plan) {
+          const currentDayIndex = Math.max(0, new Date().getDay() - 1); // 1 = Monday
+          const todayPlan = plan.days[currentDayIndex];
+          
+          if (todayPlan && todayPlan.recipe) {
+            setTodayMeals([{
+              id: 'planned-1',
+              name: todayPlan.recipe.name,
+              description: todayPlan.recipe.description,
+              image: todayPlan.recipe.image,
+              calories: todayPlan.recipe.calories,
+              time: "Almoço",
+              completed: false
+            }]);
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao carregar dashboard:", e);
+      }
+    }
+    loadDashboardData();
+  }, [familyId, activeProfileId]);
+
+  const toggleMeal = (mealId: string) => {
+    setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m));
   };
 
   const handleApproval = (action: "approve" | "reject") => {
@@ -36,28 +78,6 @@ export default function Dashboard({ currentProfile, onNavigateToView }: Dashboar
     setPendingApproval(null);
     setTimeout(() => setToastMessage(null), 4000);
   };
-
-  // Find recipes
-  const chiaRecipe = preloadedRecipes.find((r) => r.id === "rec-chia") || preloadedRecipes[5];
-  const chickenRecipe = preloadedRecipes.find((r) => r.id === "rec-chicken") || preloadedRecipes[6];
-
-  // Dynamically calculate gauges based on meal completion
-  let currentProteinPct = 50;
-  let currentFiberPct = 70;
-  let currentHydrationPct = 60;
-
-  if (mealsCompleted.breakfast) {
-    currentProteinPct += 15;
-    currentFiberPct += 15;
-  }
-  if (mealsCompleted.lunch) {
-    currentProteinPct += 20;
-    currentFiberPct += 10;
-  }
-
-  // Cap at 100%
-  currentProteinPct = Math.min(currentProteinPct, 100);
-  currentFiberPct = Math.min(currentFiberPct, 100);
 
   return (
     <motion.div
@@ -212,89 +232,54 @@ export default function Dashboard({ currentProfile, onNavigateToView }: Dashboar
             <h3 className="font-serif text-lg font-bold text-primary">Protocolo de Hoje</h3>
             
             <div className="grid grid-cols-1 gap-4">
-              {/* Breakfast Item */}
-              <div className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow relative overflow-hidden">
-                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
-                    src={chiaRecipe.image}
-                    alt={chiaRecipe.name}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
+              {todayMeals.length === 0 ? (
+                <div className="text-center py-10 bg-lab-white rounded-xl border border-dashed border-outline-variant/40">
+                  <span className="text-scientific-gray font-sans text-sm">Nenhuma formulação planejada para hoje. Vá até o Planejador Semanal.</span>
                 </div>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">08:00</span>
-                    <h4 className="font-sans text-sm font-semibold text-primary">{chiaRecipe.name}</h4>
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider ${
-                      mealsCompleted.breakfast
-                        ? "bg-secondary-container text-on-secondary-container"
-                        : "bg-surface-container text-scientific-gray"
-                    }`}>
-                      {mealsCompleted.breakfast ? "CONCLUÍDO" : "PLANEJADO"}
-                    </span>
+              ) : (
+                todayMeals.map((meal) => (
+                  <div key={meal.id} className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow relative overflow-hidden border-l-4 border-l-gold-leaf">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                      <img
+                        src={meal.image}
+                        alt={meal.name}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">{meal.time}</span>
+                        <h4 className="font-sans text-sm font-semibold text-primary">{meal.name}</h4>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider ${
+                          meal.completed
+                            ? "bg-secondary-container text-on-secondary-container"
+                            : "bg-surface-container-high text-on-surface-variant"
+                        }`}>
+                          {meal.completed ? "CONCLUÍDO" : "PLANEJADO"}
+                        </span>
+                      </div>
+                      <p className="font-sans text-xs text-scientific-gray line-clamp-1">{meal.description}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-3">
+                      <span className="font-serif text-sm font-semibold text-primary leading-none">
+                        {meal.calories} <span className="text-[10px] text-scientific-gray uppercase">kcal</span>
+                      </span>
+                      <button
+                        onClick={() => toggleMeal(meal.id)}
+                        className="text-on-surface-variant hover:text-primary transition-colors focus:outline-none cursor-pointer"
+                        title={meal.completed ? "Desmarcar conclusão" : "Marcar como concluído"}
+                      >
+                        {meal.completed ? (
+                          <CheckCircle2 className="w-5 h-5 text-secondary fill-secondary-container/20 stroke-[2]" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-outline-variant stroke-[1.5]" />
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <p className="font-sans text-xs text-scientific-gray">{chiaRecipe.description}</p>
-                </div>
-                <div className="flex flex-col items-end gap-3">
-                  <span className="font-serif text-sm font-semibold text-primary leading-none">
-                    {chiaRecipe.calories} <span className="text-[10px] text-scientific-gray uppercase">kcal</span>
-                  </span>
-                  <button
-                    onClick={() => toggleMeal("breakfast")}
-                    className="text-on-surface-variant hover:text-primary transition-colors focus:outline-none"
-                    title={mealsCompleted.breakfast ? "Desmarcar conclusão" : "Marcar como concluído"}
-                  >
-                    {mealsCompleted.breakfast ? (
-                      <CheckCircle2 className="w-5 h-5 text-secondary fill-secondary-container/20 stroke-[2]" />
-                    ) : (
-                      <Circle className="w-5 h-5 text-outline-variant stroke-[1.5]" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Lunch Item */}
-              <div className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow relative overflow-hidden border-l-4 border-l-gold-leaf">
-                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
-                    src={chickenRecipe.image}
-                    alt={chickenRecipe.name}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">13:00</span>
-                    <h4 className="font-sans text-sm font-semibold text-primary">{chickenRecipe.name}</h4>
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider ${
-                      mealsCompleted.lunch
-                        ? "bg-secondary-container text-on-secondary-container"
-                        : "bg-surface-container-high text-on-surface-variant"
-                    }`}>
-                      {mealsCompleted.lunch ? "CONCLUÍDO" : "PLANEJADO"}
-                    </span>
-                  </div>
-                  <p className="font-sans text-xs text-scientific-gray">{chickenRecipe.description}</p>
-                </div>
-                <div className="flex flex-col items-end gap-3">
-                  <span className="font-serif text-sm font-semibold text-primary leading-none">
-                    {chickenRecipe.calories} <span className="text-[10px] text-scientific-gray uppercase">kcal</span>
-                  </span>
-                  <button
-                    onClick={() => toggleMeal("lunch")}
-                    className="text-on-surface-variant hover:text-primary transition-colors focus:outline-none"
-                    title={mealsCompleted.lunch ? "Desmarcar conclusão" : "Marcar como concluído"}
-                  >
-                    {mealsCompleted.lunch ? (
-                      <CheckCircle2 className="w-5 h-5 text-secondary fill-secondary-container/20 stroke-[2]" />
-                    ) : (
-                      <Circle className="w-5 h-5 text-outline-variant stroke-[1.5]" />
-                    )}
-                  </button>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           </div>
         </div>

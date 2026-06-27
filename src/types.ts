@@ -90,3 +90,33 @@ export interface LogEntry {
   details: string;
   calories: number;
 }
+
+export interface WeeklyPlan {
+  id: string; // Ex: "2026-W26"
+  familyId: string;
+  profileId: string;
+  days: WeeklyPlanDay[];
+  portionScale: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ShoppingListDoc {
+  id: string;
+  familyId: string;
+  items: ShoppingItem[];
+  weeklyPlanRef?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConsumptionLogDoc {
+  id: string; // Data no formato "YYYY-MM-DD"
+  familyId: string;
+  profileId: string;
+  entries: LogEntry[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+}

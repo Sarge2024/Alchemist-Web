@@ -1,47 +1,123 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Plus, Minus, Edit, Sparkles, Check, ArrowRight, Zap, HelpCircle } from "lucide-react";
-import { preloadedRecipes } from "../data/recipes";
-import { Recipe } from "../types";
+import { Recipe, WeeklyPlan } from "../types";
+import { plannerService } from "../services/plannerService";
+import { dishAlchemistsService, DishRecipe } from "../services/dishAlchemistsService";
 
-export default function WeeklyPlanner() {
-  const [portionScale, setPortionScale] = useState<number>(2);
-  const [autoAdjusting, setAutoAdjusting] = useState<boolean>(false);
+interface WeeklyPlannerProps {
+  familyId: string | null;
+  activeProfileId: string | null;
+}
+
+export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlannerProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [availableRecipes, setAvailableRecipes] = useState<Recipe[]>([]);
 
-  // Monday & Wednesday preloaded meals
-  const mondayMeal: Recipe = preloadedRecipes[1]; // Bowl de Quinoa Bio-Disponível
-  const wednesdayMeal: Recipe = preloadedRecipes[0]; // Formulação de Ômega-3 do Atlântico
+  useEffect(() => {
+    async function loadData() {
+      if (!familyId || !activeProfileId) return;
+      setLoading(true);
+      try {
+        const weekId = plannerService.getCurrentWeekId();
+        let plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
+        
+        if (!plan) {
+          plan = plannerService.generateEmptyPlan(familyId, activeProfileId, weekId);
+          await plannerService.saveWeeklyPlan(plan);
+        }
+        
+        setWeeklyPlan(plan);
 
-  // Custom states for Thursday and Friday meals to allow clicking "+" and selecting/generating formulas
-  const [thursdayMeal, setThursdayMeal] = useState<Recipe | null>(null);
-  const [fridayMeal, setFridayMeal] = useState<Recipe | null>(null);
+        // Fetch available recipes
+        const apiRecipes: DishRecipe[] = await dishAlchemistsService.getRecipes();
+        const mappedRecipes: Recipe[] = apiRecipes.map(apiRecipe => ({
+          id: apiRecipe.id,
+          name: apiRecipe.title,
+          description: apiRecipe.description,
+          category: apiRecipe.category,
+          calories: apiRecipe.total_nutrition?.calories || 0,
+          protein: apiRecipe.total_nutrition?.protein || 0,
+          carbs: apiRecipe.total_nutrition?.carbs || 0,
+          fat: apiRecipe.total_nutrition?.fat || 0,
+          image: apiRecipe.image_url,
+          tags: [apiRecipe.category]
+        }));
+        setAvailableRecipes(mappedRecipes);
+      } catch (err) {
+        console.error("Erro ao carregar planejamento:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [familyId, activeProfileId]);
 
-  const incrementScale = () => setPortionScale((prev) => Math.min(prev + 1, 8));
-  const decrementScale = () => setPortionScale((prev) => Math.max(prev - 1, 1));
+  const incrementScale = () => {
+    if (!weeklyPlan) return;
+    const newPlan = { ...weeklyPlan, portionScale: Math.min(weeklyPlan.portionScale + 1, 8) };
+    setWeeklyPlan(newPlan);
+    savePlanDebounced(newPlan);
+  };
+  
+  const decrementScale = () => {
+    if (!weeklyPlan) return;
+    const newPlan = { ...weeklyPlan, portionScale: Math.max(weeklyPlan.portionScale - 1, 1) };
+    setWeeklyPlan(newPlan);
+    savePlanDebounced(newPlan);
+  };
+
+  const savePlanDebounced = async (plan: WeeklyPlan) => {
+    try {
+      await plannerService.saveWeeklyPlan(plan);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const runAutoAdjust = () => {
+    if (!weeklyPlan) return;
     setAutoAdjusting(true);
     setTimeout(() => {
       setAutoAdjusting(false);
-      setToastMessage("Metabolismo recalibrado! Porções do cardápio otimizadas para 2.450 kcal.");
+      setToastMessage("Metabolismo recalibrado! Porções otimizadas para o plano.");
       setTimeout(() => setToastMessage(null), 4000);
     }, 1500);
   };
 
-  const addFormula = (day: "thu" | "fri") => {
-    // Select an unassigned recipe
-    const available = preloadedRecipes.filter(
-      (r) => r.id !== mondayMeal.id && r.id !== wednesdayMeal.id
-    );
-    const randomRecipe = available[Math.floor(Math.random() * available.length)];
+  const addFormula = async (dayIndex: number) => {
+    if (!weeklyPlan || availableRecipes.length === 0) return;
+    const randomRecipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
     
-    if (day === "thu") {
-      setThursdayMeal(randomRecipe);
-    } else {
-      setFridayMeal(randomRecipe);
-    }
+    const newDays = [...weeklyPlan.days];
+    newDays[dayIndex] = { ...newDays[dayIndex], recipe: randomRecipe };
+    const newPlan = { ...weeklyPlan, days: newDays };
+    
+    setWeeklyPlan(newPlan);
+    await savePlanDebounced(newPlan);
   };
+  
+  const removeFormula = async (dayIndex: number) => {
+    if (!weeklyPlan) return;
+    const newDays = [...weeklyPlan.days];
+    newDays[dayIndex] = { ...newDays[dayIndex], recipe: undefined };
+    const newPlan = { ...weeklyPlan, days: newDays };
+    
+    setWeeklyPlan(newPlan);
+    await savePlanDebounced(newPlan);
+  };
+
+  if (loading || !weeklyPlan) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+  
+  const [autoAdjusting, setAutoAdjusting] = useState<boolean>(false);
 
   return (
     <motion.div
@@ -89,7 +165,7 @@ export default function WeeklyPlanner() {
               <Minus className="w-4 h-4" />
             </button>
             <span className="w-12 text-center font-serif text-lg font-bold text-primary">
-              {portionScale}
+              {weeklyPlan.portionScale}
             </span>
             <button
               onClick={incrementScale}
@@ -104,256 +180,109 @@ export default function WeeklyPlanner() {
 
       {/* Weekly Grid (Bento Style) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        {/* Day 1: Monday */}
-        <div className="bg-lab-white border border-outline-variant/40 rounded-xl p-5 relative flex flex-col justify-between hover:shadow-md transition-all duration-300">
-          <div>
-            <div className="flex justify-between items-start mb-4">
+        {weeklyPlan.days.map((day, index) => {
+          // Special placeholder logic for Tuesday (index 1) just for mockup purposes
+          if (index === 1 && !day.recipe) {
+            return (
+              <div key={index} className="bg-lab-white border border-outline-variant/40 rounded-xl p-5 relative flex flex-col justify-between hover:shadow-md transition-all duration-300">
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
+                        {day.dayName}
+                      </span>
+                      <h3 className="font-serif text-xl font-bold text-primary">{day.dateStr}</h3>
+                    </div>
+                  </div>
+                  <div className="rounded-lg overflow-hidden mb-4 relative aspect-[4/3] bg-surface-container/30 flex items-center justify-center border border-dashed border-outline-variant/40">
+                    <div className="text-center p-4 cursor-pointer hover:opacity-80" onClick={() => addFormula(index)}>
+                      <Sparkles className="w-6 h-6 text-scientific-gray/60 mx-auto mb-1.5" />
+                      <span className="font-sans text-[10px] text-scientific-gray uppercase tracking-wide">
+                        Gerar Formulação
+                      </span>
+                    </div>
+                  </div>
+                  <p className="font-sans text-xs text-scientific-gray italic leading-relaxed mb-4">
+                    Pendente de calibração metabólica.
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={index} className={`border border-outline-variant/40 rounded-xl p-5 flex flex-col justify-between hover:bg-white hover:shadow-md transition-all duration-300 min-h-[300px] ${day.recipe ? "bg-lab-white" : "bg-lab-white/70 border-dashed"}`}>
               <div>
-                <span className="font-sans text-[10px] font-bold text-gold-leaf uppercase tracking-wider block mb-0.5">
-                  Segunda-feira
-                </span>
-                <h3 className="font-serif text-xl font-bold text-primary">24 Out</h3>
-              </div>
-              <span className="text-[10px] font-sans font-semibold text-secondary uppercase bg-sage-wash px-2 py-0.5 rounded">
-                Ativo
-              </span>
-            </div>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
+                      {day.dayName}
+                    </span>
+                    <h3 className={`font-serif text-xl font-bold ${day.recipe ? "text-primary" : "text-primary/70"}`}>
+                      {day.dateStr}
+                    </h3>
+                  </div>
+                  {day.recipe && (
+                    <span className="text-[10px] font-sans font-semibold text-secondary uppercase bg-sage-wash px-2 py-0.5 rounded">
+                      Ativo
+                    </span>
+                  )}
+                </div>
 
-            <div className="rounded-lg overflow-hidden mb-4 relative aspect-[4/3] border border-outline-variant/10">
-              <img
-                src={mondayMeal.image}
-                alt={mondayMeal.name}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                <span className="font-sans text-xs font-semibold text-white leading-tight">
-                  {mondayMeal.name}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              <span className="px-2 py-0.5 rounded bg-sage-wash text-secondary font-sans text-[10px] font-semibold uppercase">
-                {mondayMeal.category}
-              </span>
-              <span className="px-2 py-0.5 rounded bg-surface-container text-scientific-gray font-sans text-[10px]">
-                {mondayMeal.prepTime}
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-outline-variant/20 flex justify-between items-center">
-            <span className="font-serif text-xs font-semibold text-scientific-gray">
-              {Math.round(mondayMeal.calories * (portionScale / 2))} kcal
-            </span>
-            <span className="font-sans text-[10px] font-semibold text-primary flex items-center gap-1 hover:text-gold-leaf transition-colors cursor-pointer">
-              Fórmula <ArrowRight className="w-3 h-3" />
-            </span>
-          </div>
-        </div>
-
-        {/* Day 2: Tuesday (Active placeholder template) */}
-        <div className="bg-lab-white border border-outline-variant/40 rounded-xl p-5 relative flex flex-col justify-between hover:shadow-md transition-all duration-300">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
-                  Terça-feira
-                </span>
-                <h3 className="font-serif text-xl font-bold text-primary">25 Out</h3>
-              </div>
-            </div>
-
-            <div className="rounded-lg overflow-hidden mb-4 relative aspect-[4/3] bg-surface-container/30 flex items-center justify-center border border-dashed border-outline-variant/40">
-              <div className="text-center p-4">
-                <Sparkles className="w-6 h-6 text-scientific-gray/60 mx-auto mb-1.5" />
-                <span className="font-sans text-[10px] text-scientific-gray uppercase tracking-wide">
-                  Otimização Automática
-                </span>
-              </div>
-            </div>
-
-            <p className="font-sans text-xs text-scientific-gray italic leading-relaxed mb-4">
-              Gerando sequência de refeições com base nos marcadores do relógio biológico...
-            </p>
-          </div>
-
-          <div className="pt-4 border-t border-outline-variant/20 flex justify-center">
-            <span className="font-sans text-[10px] font-semibold text-scientific-gray uppercase tracking-wider">
-              Aguardando Recalibração
-            </span>
-          </div>
-        </div>
-
-        {/* Day 3: Wednesday */}
-        <div className="bg-lab-white border border-outline-variant/40 rounded-xl p-5 relative flex flex-col justify-between hover:shadow-md transition-all duration-300">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
-                  Quarta-feira
-                </span>
-                <h3 className="font-serif text-xl font-bold text-primary">26 Out</h3>
-              </div>
-            </div>
-
-            <div className="rounded-lg overflow-hidden mb-4 relative aspect-[4/3] border border-outline-variant/10">
-              <img
-                src={wednesdayMeal.image}
-                alt={wednesdayMeal.name}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                <span className="font-sans text-xs font-semibold text-white leading-tight">
-                  {wednesdayMeal.name}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              <span className="px-2 py-0.5 rounded bg-sage-wash text-secondary font-sans text-[10px] font-semibold uppercase">
-                {wednesdayMeal.category}
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-outline-variant/20 flex justify-between items-center">
-            <span className="font-serif text-xs font-semibold text-scientific-gray">
-              {Math.round(wednesdayMeal.calories * (portionScale / 2))} kcal
-            </span>
-            <span className="font-sans text-[10px] font-semibold text-primary flex items-center gap-1 hover:text-gold-leaf transition-colors cursor-pointer">
-              Fórmula <ArrowRight className="w-3 h-3" />
-            </span>
-          </div>
-        </div>
-
-        {/* Day 4: Thursday (Interactive Select Formula State) */}
-        <div className="bg-lab-white/70 border border-dashed border-outline-variant/40 rounded-xl p-5 flex flex-col justify-between hover:bg-white transition-all duration-300 min-h-[300px]">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
-                  Quinta-feira
-                </span>
-                <h3 className="font-serif text-xl font-bold text-primary/70">27 Out</h3>
-              </div>
-            </div>
-
-            {thursdayMeal ? (
-              <div className="space-y-4">
-                <div className="rounded-lg overflow-hidden relative aspect-[4/3] border border-outline-variant/10">
-                  <img
-                    src={thursdayMeal.image}
-                    alt={thursdayMeal.name}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                    <span className="font-sans text-xs font-semibold text-white leading-tight">
-                      {thursdayMeal.name}
+                {day.recipe ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg overflow-hidden relative aspect-[4/3] border border-outline-variant/10">
+                      <img
+                        src={day.recipe.image}
+                        alt={day.recipe.name}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
+                        <span className="font-sans text-xs font-semibold text-white leading-tight">
+                          {day.recipe.name}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="inline-block px-2 py-0.5 rounded bg-sage-wash text-secondary font-sans text-[10px] font-semibold uppercase">
+                      {day.recipe.category}
                     </span>
                   </div>
-                </div>
-                <span className="inline-block px-2 py-0.5 rounded bg-sage-wash text-secondary font-sans text-[10px] font-semibold uppercase">
-                  {thursdayMeal.category}
-                </span>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
-                <button
-                  onClick={() => addFormula("thu")}
-                  className="w-10 h-10 rounded-full border border-primary text-primary flex items-center justify-center hover:bg-sage-wash transition-colors focus:outline-none cursor-pointer mb-2"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <span className="font-sans text-[10px] text-scientific-gray font-semibold uppercase tracking-wider">
-                  Selecionar Fórmula
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-4 border-t border-outline-variant/20 flex justify-between items-center text-xs text-scientific-gray">
-            {thursdayMeal ? (
-              <>
-                <span>{Math.round(thursdayMeal.calories * (portionScale / 2))} kcal</span>
-                <button
-                  onClick={() => setThursdayMeal(null)}
-                  className="text-[10px] uppercase font-bold text-error hover:underline focus:outline-none"
-                >
-                  Remover
-                </button>
-              </>
-            ) : (
-              <span className="italic">Nenhuma fórmula</span>
-            )}
-          </div>
-        </div>
-
-        {/* Day 5: Friday (Interactive Select Formula State) */}
-        <div className="bg-lab-white/70 border border-dashed border-outline-variant/40 rounded-xl p-5 flex flex-col justify-between hover:bg-white transition-all duration-300 min-h-[300px]">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block mb-0.5">
-                  Sexta-feira
-                </span>
-                <h3 className="font-serif text-xl font-bold text-primary/70">28 Out</h3>
-              </div>
-            </div>
-
-            {fridayMeal ? (
-              <div className="space-y-4">
-                <div className="rounded-lg overflow-hidden relative aspect-[4/3] border border-outline-variant/10">
-                  <img
-                    src={fridayMeal.image}
-                    alt={fridayMeal.name}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                    <span className="font-sans text-xs font-semibold text-white leading-tight">
-                      {fridayMeal.name}
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
+                    <button
+                      onClick={() => addFormula(index)}
+                      className="w-10 h-10 rounded-full border border-primary text-primary flex items-center justify-center hover:bg-sage-wash transition-colors focus:outline-none cursor-pointer mb-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <span className="font-sans text-[10px] text-scientific-gray font-semibold uppercase tracking-wider">
+                      Selecionar Fórmula
                     </span>
                   </div>
-                </div>
-                <span className="inline-block px-2 py-0.5 rounded bg-sage-wash text-secondary font-sans text-[10px] font-semibold uppercase">
-                  {fridayMeal.category}
-                </span>
+                )}
               </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
-                <button
-                  onClick={() => addFormula("fri")}
-                  className="w-10 h-10 rounded-full border border-primary text-primary flex items-center justify-center hover:bg-sage-wash transition-colors focus:outline-none cursor-pointer mb-2"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <span className="font-sans text-[10px] text-scientific-gray font-semibold uppercase tracking-wider">
-                  Selecionar Fórmula
-                </span>
-              </div>
-            )}
-          </div>
 
-          <div className="pt-4 border-t border-outline-variant/20 flex justify-between items-center text-xs text-scientific-gray">
-            {fridayMeal ? (
-              <>
-                <span>{Math.round(fridayMeal.calories * (portionScale / 2))} kcal</span>
-                <button
-                  onClick={() => setFridayMeal(null)}
-                  className="text-[10px] uppercase font-bold text-error hover:underline focus:outline-none"
-                >
-                  Remover
-                </button>
-              </>
-            ) : (
-              <span className="italic">Nenhuma fórmula</span>
-            )}
-          </div>
-        </div>
+              <div className="pt-4 border-t border-outline-variant/20 flex justify-between items-center text-xs">
+                {day.recipe ? (
+                  <>
+                    <span className="font-serif text-xs font-semibold text-scientific-gray">
+                      {Math.round(day.recipe.calories * (weeklyPlan.portionScale / 2))} kcal
+                    </span>
+                    <button
+                      onClick={() => removeFormula(index)}
+                      className="text-[10px] uppercase font-bold text-error hover:underline focus:outline-none"
+                    >
+                      Remover
+                    </button>
+                  </>
+                ) : (
+                  <span className="italic text-scientific-gray">Nenhuma fórmula</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Lab Insights visualization Section */}
