@@ -58,20 +58,9 @@ export default function App({ initialProfiles, familyId }: AppProps) {
 
   const currentProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0];
 
-  // Sincroniza atualizações de perfil com o Firestore
-  const handleProfilesChange = async (newProfiles: Profile[]) => {
+  // Sincroniza atualizações de perfil com o estado local apenas (banco de dados é tratado pelo próprio componente)
+  const handleProfilesChange = (newProfiles: Profile[]) => {
     setProfiles(newProfiles);
-    // Para simplificar, assumimos que o perfil ativo foi o atualizado
-    const updatedActiveProfile = newProfiles.find(p => p.id === activeProfileId);
-    if (updatedActiveProfile && familyId) {
-      try {
-        await userService.updateMemberProfile(familyId, updatedActiveProfile.id, updatedActiveProfile);
-        // triggerGlobalToast("Perfil salvo na nuvem com sucesso!"); // Opcional
-      } catch (error) {
-        console.error("Falha ao salvar no banco", error);
-        triggerGlobalToast("Erro ao salvar perfil");
-      }
-    }
   };
 
   // Navigate to profile settings on avatar click

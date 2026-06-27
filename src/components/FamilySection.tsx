@@ -80,16 +80,32 @@ export default function FamilySection({
     const updatedProfiles = profiles.map((p) => (p.id === editingProfile.id ? updatedWithMetric : p));
     onProfilesChange(updatedProfiles);
     
+    if (familyId) {
+      import("../services/userService").then(({ userService }) => {
+        userService.updateMemberProfile(familyId, editingProfile.id, updatedWithMetric).catch(console.error);
+      });
+    }
+    
     setToastMessage(`Configurações de ${editingProfile.name} salvas com sucesso.`);
     setMode("list");
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const deleteProfile = (profileId: string) => {
+  const deleteProfile = async (profileId: string) => {
     if (profiles.length <= 1) {
       alert("Você deve manter pelo menos um perfil familiar ativo.");
       return;
     }
+    
+    if (familyId) {
+      try {
+        const { userService } = await import("../services/userService");
+        await userService.deleteMember(familyId, profileId);
+      } catch (err) {
+        console.error("Erro ao deletar perfil", err);
+      }
+    }
+    
     const filtered = profiles.filter((p) => p.id !== profileId);
     onProfilesChange(filtered);
     if (activeProfileId === profileId) {
