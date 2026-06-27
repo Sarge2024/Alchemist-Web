@@ -98,7 +98,7 @@ export default function Dashboard({ currentProfile, onNavigateToView }: Dashboar
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-serif text-md font-semibold text-primary">Indicadores de Absorção</h3>
               <span className="flex items-center gap-1.5 text-xs text-secondary bg-sage-wash px-2.5 py-1 rounded font-semibold font-sans uppercase">
-                <TrendingUp className="w-3.5 h-3.5" /> FATO 4.0 Ativo
+                <TrendingUp className="w-3.5 h-3.5" /> TACO 4.0 Ativo
               </span>
             </div>
 

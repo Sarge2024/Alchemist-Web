@@ -394,7 +394,7 @@ export default function WeeklyPlanner() {
                 Metabolismo Alvo
               </h5>
               <p className="font-sans text-xs text-on-surface-variant leading-relaxed">
-                Sua trajetória FATO 4.0 atual está otimizada para a indução da:
+                Sua trajetória TACO 4.0 atual está otimizada para a indução da:
                 <strong className="block text-primary font-bold mt-1 text-sm font-sans">Fusão Cetogênica</strong>
               </p>
             </div>

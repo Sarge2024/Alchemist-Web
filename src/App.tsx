@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ActiveView, Profile } from "./types";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -11,16 +11,22 @@ import FamilySection from "./components/FamilySection";
 import ConsumptionHistory from "./components/ConsumptionHistory";
 import { AnimatePresence, motion } from "motion/react";
 import { Check } from "lucide-react";
+import { userService } from "./services/userService";
 
-export default function App() {
+interface AppProps {
+  initialProfiles?: Profile[];
+  familyId?: string;
+}
+
+export default function App({ initialProfiles, familyId }: AppProps) {
   // Navigation active view
   const [activeView, setActiveView] = useState<ActiveView>(ActiveView.DASHBOARD);
   
   // Custom Toast notification states
   const [globalToast, setGlobalToast] = useState<string | null>(null);
 
-  // Loaded profiles
-  const [profiles, setProfiles] = useState<Profile[]>([
+  // Loaded profiles (usa o real vindo do login ou fallback pro mock visual)
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles || [
     {
       id: "p-elena",
       name: "Elena Vance",
@@ -42,42 +48,35 @@ export default function App() {
       fatPercentage: 25,
       allergies: ["Amendoim"],
       medications: "Suplementação de vitamina D3 2000 UI e Zinco Quelato antes do repouso.",
-    },
-    {
-      id: "p-marcus",
-      name: "Marcus Vance",
-      avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuBiXgU_g-gHl9pYk0vX6C_5V9pXp-N8vS2Gv67x4y_S78-M-L_y7Z_M_Z_Y5X_O8g_P8_A_B_C_D_E_F_G",
-      role: "Dependente",
-      isMainAccount: false,
-      dietaryProtocol: ["Sem Glúten"],
-      mainMetric: "90g Meta de Proteína",
-      metricValue: 90,
-      metricLabel: "Proteína",
-      progressPercentage: 60,
-      email: "marcus.vance@molecular-lab.org",
-      interfaceLanguage: "pt-BR",
-      timezone: "America/Sao_Paulo",
-      measurementSystem: "metric",
-      dailyCalories: 1800,
-      proteinPercentage: 25,
-      carbsPercentage: 50,
-      fatPercentage: 25,
-      allergies: ["Glúten"],
-      medications: "Complexo B líquido pela manhã.",
     }
   ]);
 
-  const [activeProfileId, setActiveProfileId] = useState<string>("p-elena");
+  const [activeProfileId, setActiveProfileId] = useState<string>(
+    initialProfiles && initialProfiles.length > 0 ? initialProfiles[0].id : "p-elena"
+  );
   const [notificationCount, setNotificationCount] = useState<number>(1);
 
   const currentProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0];
 
-  // Toggle profile on clicking the header avatar directly for a magical UX shortcut!
+  // Sincroniza atualizações de perfil com o Firestore
+  const handleProfilesChange = async (newProfiles: Profile[]) => {
+    setProfiles(newProfiles);
+    // Para simplificar, assumimos que o perfil ativo foi o atualizado
+    const updatedActiveProfile = newProfiles.find(p => p.id === activeProfileId);
+    if (updatedActiveProfile && familyId) {
+      try {
+        await userService.updateMemberProfile(familyId, updatedActiveProfile.id, updatedActiveProfile);
+        // triggerGlobalToast("Perfil salvo na nuvem com sucesso!"); // Opcional
+      } catch (error) {
+        console.error("Falha ao salvar no banco", error);
+        triggerGlobalToast("Erro ao salvar perfil");
+      }
+    }
+  };
+
+  // Navigate to profile settings on avatar click
   const handleAvatarClick = () => {
-    const nextIndex = profiles.findIndex((p) => p.id === activeProfileId) === 0 ? 1 : 0;
-    const nextProfile = profiles[nextIndex];
-    setActiveProfileId(nextProfile.id);
-    triggerGlobalToast(`Perfil familiar alterado para: ${nextProfile.name}`);
+    setActiveView(ActiveView.FAMILY);
   };
 
   const handleNotificationClick = () => {
@@ -112,9 +111,10 @@ export default function App() {
         return (
           <FamilySection
             profiles={profiles}
-            onProfilesChange={setProfiles}
+            onProfilesChange={handleProfilesChange}
             activeProfileId={activeProfileId}
             onSelectActiveProfile={setActiveProfileId}
+            familyId={familyId}
           />
         );
       case ActiveView.HISTORY:

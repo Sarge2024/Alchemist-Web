@@ -48,7 +48,7 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
       {/* Footer credit */}
       <div className="mt-auto pt-6 border-t border-outline-variant/20 flex flex-col gap-1 text-[10px] text-scientific-gray">
         <span>Alchemist Web v4.2</span>
-        <span>Módulo FATO Otimizado</span>
+        <span>Módulo TACO Otimizado</span>
       </div>
     </aside>
   );

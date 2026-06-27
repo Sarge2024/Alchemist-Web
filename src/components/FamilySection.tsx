@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Save, Edit, Trash2, Plus, AlertCircle, Check, UserPlus, Globe, HelpCircle } from "lucide-react";
+import { ArrowLeft, Save, Edit, Trash2, Plus, AlertCircle, Check, UserPlus, Globe, HelpCircle, MessageCircle } from "lucide-react";
 import { Profile, Invite, Role } from "../types";
 
 interface FamilySectionProps {
@@ -8,6 +8,7 @@ interface FamilySectionProps {
   onProfilesChange: (updated: Profile[]) => void;
   activeProfileId: string;
   onSelectActiveProfile: (id: string) => void;
+  familyId?: string | null;
 }
 
 export default function FamilySection({
@@ -15,21 +16,19 @@ export default function FamilySection({
   onProfilesChange,
   activeProfileId,
   onSelectActiveProfile,
+  familyId,
 }: FamilySectionProps) {
-  // Navigation states: "list", "edit", "invite"
-  const [mode, setMode] = useState<"list" | "edit" | "invite">("list");
+  // Navigation states: "list", "edit", "add"
+  const [mode, setMode] = useState<"list" | "edit" | "add">("list");
   
   // Member profile we are currently editing
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Invite states
-  const [inviteEmail, setInviteEmail] = useState<string>("");
-  const [inviteRole, setInviteRole] = useState<Role>(Role.MEMBER);
-  const [invites, setInvites] = useState<Invite[]>([
-    { id: "inv-1", email: "elena.r@lab-research.org", role: Role.MEMBER, sentDaysAgo: 2 },
-    { id: "inv-2", email: "marcus.v@molecular-diet.com", role: Role.DEPENDENT, sentDaysAgo: 5 }
-  ]);
+  const [newDependentName, setNewDependentName] = useState("");
+  const [newDependentRelationship, setNewDependentRelationship] = useState("");
+  const [newDependentRole, setNewDependentRole] = useState("Dependente");
+  const [isAdding, setIsAdding] = useState(false);
 
   // Allergies & dietary preset helpers
   const availableAllergies = ["Amendoim", "Glúten", "Lactose", "Frutos do Mar", "Soja", "Nozes"];
@@ -99,28 +98,33 @@ export default function FamilySection({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSendInvite = (e: FormEvent) => {
+  const handleAddDependent = async (e: FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!newDependentName.trim() || !newDependentRelationship.trim() || !familyId) return;
 
-    const newInvite: Invite = {
-      id: `inv-manual-${Date.now()}`,
-      email: inviteEmail.trim(),
-      role: inviteRole,
-      sentDaysAgo: 0,
-    };
-
-    setInvites((prev) => [newInvite, ...prev]);
-    setInviteEmail("");
-    setToastMessage(`Convite enviado para ${newInvite.email}`);
-    setMode("list");
-    setTimeout(() => setToastMessage(null), 4000);
-  };
-
-  const cancelInvite = (id: string) => {
-    setInvites((prev) => prev.filter((i) => i.id !== id));
-    setToastMessage("Convite cancelado.");
-    setTimeout(() => setToastMessage(null), 3000);
+    setIsAdding(true);
+    try {
+      const { userService } = await import("../services/userService");
+      const newProfile = await userService.addDependent(familyId, {
+        name: newDependentName,
+        relationship: newDependentRelationship,
+        role: newDependentRole,
+      });
+      
+      onProfilesChange([...profiles, newProfile]);
+      setToastMessage(`Dependente ${newProfile.name} adicionado com sucesso.`);
+      
+      // Reset form
+      setNewDependentName("");
+      setNewDependentRelationship("");
+      setNewDependentRole("Dependente");
+      setMode("list");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao adicionar dependente.");
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   // Live macro calculation helper for rendering
@@ -193,7 +197,7 @@ export default function FamilySection({
                           {p.name}
                         </h4>
                         <p className="font-sans text-xs text-scientific-gray leading-none mt-0.5">
-                          {p.role}
+                          {p.role} {p.relationship ? `• ${p.relationship}` : ""}
                         </p>
                       </div>
                     </div>
@@ -218,6 +222,19 @@ export default function FamilySection({
                       </div>
                     </div>
                   </div>
+
+                  {/* WhatsApp Action Button */}
+                  {p.phone && p.phone.trim() !== "" && (
+                    <a
+                      href={`https://wa.me/${p.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${p.name}, aqui é do Alchemist Web!`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-4 flex items-center justify-center gap-2 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] py-2 px-3 rounded-lg border border-[#25D366]/30 transition-colors text-xs font-semibold"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Enviar WhatsApp
+                    </a>
+                  )}
 
                   {/* Actions footer */}
                   <div className="pt-4 border-t border-outline-variant/10 flex gap-2">
@@ -254,45 +271,18 @@ export default function FamilySection({
               );
             })}
 
-            {/* Invitation placeholder creator card */}
+            {/* Add member creator card */}
             <div
-              onClick={() => setMode("invite")}
+              onClick={() => setMode("add")}
               className="border-2 border-dashed border-outline-variant/50 rounded-xl p-6 hover:bg-lab-white/40 hover:border-primary transition-all duration-300 flex flex-col items-center justify-center text-center cursor-pointer min-h-[220px]"
             >
               <UserPlus className="w-8 h-8 text-secondary mb-3" />
-              <h4 className="font-serif text-base font-bold text-primary">Convidar Membro</h4>
+              <h4 className="font-serif text-base font-bold text-primary">Adicionar Dependente</h4>
               <p className="font-sans text-xs text-scientific-gray max-w-[200px] mt-1.5 leading-relaxed">
-                Adicione cônjuge, dependentes ou cuidadores de saúde ao grupo familiar.
+                Adicione cônjuge, filhos ou membros da família ao seu grupo.
               </p>
             </div>
           </div>
-
-          {/* Sent Invites list */}
-          {invites.length > 0 && (
-            <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm">
-              <h3 className="font-serif text-md font-bold text-primary mb-4 pb-2 border-b border-outline-variant/10">
-                Convites Enviados (Aguardando Aceitação)
-              </h3>
-              <div className="divide-y divide-outline-variant/10">
-                {invites.map((i) => (
-                  <div key={i.id} className="flex justify-between items-center py-3">
-                    <div className="flex flex-col">
-                      <span className="font-sans text-xs font-bold text-primary">{i.email}</span>
-                      <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                        Permissão de {i.role} • Enviado {i.sentDaysAgo === 0 ? "hoje" : `há ${i.sentDaysAgo} dias`}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => cancelInvite(i.id)}
-                      className="px-3 py-1.5 border border-outline-variant/60 hover:border-error hover:text-error text-scientific-gray font-sans text-xs rounded transition-all focus:outline-none cursor-pointer"
-                    >
-                      Cancelar Convite
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </motion.div>
       )}
 
@@ -350,8 +340,44 @@ export default function FamilySection({
                 </h3>
                 <p className="font-sans text-xs text-scientific-gray mt-1">{editingProfile.role}</p>
 
-                <div className="pt-4 mt-4 border-t border-outline-variant/20 space-y-2 text-left">
-                  <div className="flex justify-between items-center text-[10px] font-sans font-semibold">
+                <div className="pt-4 mt-4 border-t border-outline-variant/20 space-y-4 text-left">
+                  {/* Grau de Parentesco */}
+                  <div>
+                    <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                      Grau de Parentesco
+                    </label>
+                    <select
+                      value={editingProfile.relationship || ""}
+                      onChange={(e) => setEditingProfile({ ...editingProfile, relationship: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs"
+                    >
+                      <option value="">Selecione...</option>
+                      <option value="Eu mesmo(a)">Eu mesmo(a)</option>
+                      <option value="Esposa">Esposa</option>
+                      <option value="Marido">Marido</option>
+                      <option value="Filho(a)">Filho(a)</option>
+                      <option value="Mãe">Mãe</option>
+                      <option value="Pai">Pai</option>
+                      <option value="Amigo(a)">Amigo(a)</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div>
+                    <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                      Celular / WhatsApp
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="Ex: 5511999999999"
+                      value={editingProfile.phone || ""}
+                      onChange={(e) => setEditingProfile({ ...editingProfile, phone: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs"
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center text-[10px] font-sans font-semibold pt-2 border-t border-outline-variant/20">
                     <span className="text-scientific-gray">Email</span>
                     <span className="text-primary truncate max-w-[150px]">{editingProfile.email}</span>
                   </div>
@@ -650,8 +676,8 @@ export default function FamilySection({
         </motion.div>
       )}
 
-      {/* VIEW 3: Invite Family Member View */}
-      {mode === "invite" && (
+      {/* VIEW 3: Add Dependent View */}
+      {mode === "add" && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -667,29 +693,51 @@ export default function FamilySection({
             </button>
             <div>
               <h2 className="font-serif text-2xl font-bold text-primary tracking-tight">
-                Convidar Membro Familiar
+                Adicionar Novo Dependente
               </h2>
             </div>
           </div>
 
           <div className="bg-lab-white border border-outline-variant/40 rounded-xl p-6 shadow-sm">
             <p className="font-sans text-xs text-scientific-gray mb-6 leading-relaxed">
-              Insira o email e defina a função/permissão do novo integrante do seu laboratório dietético. Um email de aprovação será enviado.
+              Crie um perfil para um membro da sua família. Você (Master) gerenciará as configurações nutricionais deste perfil.
             </p>
 
-            <form onSubmit={handleSendInvite} className="space-y-4">
+            <form onSubmit={handleAddDependent} className="space-y-4">
               <div>
                 <label className="block text-scientific-gray font-semibold mb-1 text-[10px] uppercase tracking-wider font-sans">
-                  Endereço de Email
+                  Nome Completo
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="exemplo@organizacao.com"
+                  value={newDependentName}
+                  onChange={(e) => setNewDependentName(e.target.value)}
+                  placeholder="Ex: Maria Eduarda"
                   className="w-full px-4 py-2.5 bg-white border border-outline-variant/50 rounded-lg outline-none font-sans text-xs text-primary"
                 />
+              </div>
+
+              <div>
+                <label className="block text-scientific-gray font-semibold mb-1 text-[10px] uppercase tracking-wider font-sans">
+                  Grau de Parentesco
+                </label>
+                <select
+                  required
+                  value={newDependentRelationship}
+                  onChange={(e) => setNewDependentRelationship(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white border border-outline-variant/50 rounded-lg outline-none font-sans text-xs text-primary"
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Esposa">Esposa</option>
+                  <option value="Marido">Marido</option>
+                  <option value="Filho(a)">Filho(a)</option>
+                  <option value="Mãe">Mãe</option>
+                  <option value="Pai">Pai</option>
+                  <option value="Avô/Avó">Avô/Avó</option>
+                  <option value="Amigo(a)">Amigo(a)</option>
+                  <option value="Outro">Outro</option>
+                </select>
               </div>
 
               <div>
@@ -697,23 +745,28 @@ export default function FamilySection({
                   Função Familiar
                 </label>
                 <select
-                  value={inviteRole}
-                  onChange={(e: any) => setInviteRole(e.target.value)}
+                  value={newDependentRole}
+                  onChange={(e) => setNewDependentRole(e.target.value)}
                   className="w-full px-3 py-2.5 bg-white border border-outline-variant/50 rounded-lg outline-none font-sans text-xs text-primary"
                 >
-                  <option value={Role.MEMBER}>Membro (Compartilha todas as métricas)</option>
-                  <option value={Role.DEPENDENT}>Dependente (Controle parental de porções)</option>
-                  <option value={Role.CAREGIVER}>Cuidador (Somente visualização de relatórios)</option>
+                  <option value="Dependente">Dependente (Padrao)</option>
+                  <option value="Membro">Membro da Família</option>
+                  <option value="Cuidador">Cuidador</option>
                 </select>
               </div>
 
               <div className="pt-4 flex gap-3">
                 <button
                   type="submit"
-                  className="flex-1 bg-primary text-white font-sans text-xs font-bold py-3 rounded-lg hover:opacity-90 shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={isAdding}
+                  className="flex-1 bg-primary text-white font-sans text-xs font-bold py-3 rounded-lg hover:opacity-90 shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <UserPlus className="w-4 h-4 text-primary-fixed" />
-                  <span>Enviar Convite</span>
+                  {isAdding ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <UserPlus className="w-4 h-4 text-primary-fixed" />
+                  )}
+                  <span>{isAdding ? "Adicionando..." : "Criar Dependente"}</span>
                 </button>
                 <button
                   type="button"

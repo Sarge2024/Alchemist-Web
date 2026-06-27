@@ -13,12 +13,22 @@ export enum Role {
   CAREGIVER = "Cuidador"
 }
 
+export interface Family {
+  id: string;
+  name: string;
+  adminUid: string;
+  createdAt: number;
+}
+
 export interface Profile {
   id: string;
+  familyId?: string;
   name: string;
   avatar: string;
   role: string;
   isMainAccount: boolean;
+  relationship?: string; // Grau de parentesco
+  phone?: string; // WhatsApp
   dietaryProtocol: string[]; // e.g. ["Vegano", "Sem Lactose"]
   mainMetric: string; // e.g. "120g Meta de Proteína"
   metricValue: number;

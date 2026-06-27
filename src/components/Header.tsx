@@ -1,5 +1,7 @@
-import { FlaskConical, Bell } from "lucide-react";
+import { FlaskConical, Bell, LogOut } from "lucide-react";
 import { Profile, ActiveView } from "../types";
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase/config';
 
 interface HeaderProps {
   currentProfile: Profile;
@@ -100,6 +102,20 @@ export default function Header({
             </span>
           </div>
         </button>
+
+        {/* Logout Button */}
+        {auth && (
+          <>
+            <div className="hidden sm:block w-px h-6 bg-outline-variant/40" />
+            <button
+              onClick={() => signOut(auth)}
+              className="relative w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-error/10 hover:text-error transition-all duration-200 cursor-pointer"
+              title="Sair"
+            >
+              <LogOut className="w-5 h-5 stroke-[1.75]" />
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
