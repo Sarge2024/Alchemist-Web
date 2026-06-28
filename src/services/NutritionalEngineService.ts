@@ -4,6 +4,8 @@
 // onde process.env funciona e as APIs externas (TACO + USDA) são acessíveis
 // com suas respectivas API Keys.
 
+import { apiService } from './apiService';
+
 export interface IngredientQuery {
   name: string;
   quantity: number;
@@ -32,9 +34,14 @@ export class NutritionalEngineService {
     details: NutritionalResult[]
   }> {
     try {
-      const response = await fetch('/api/nutrition/calculate', {
+      const isBff = apiService.API_BASE === '/api';
+      const url = isBff 
+        ? '/api/nutrition/calculate' 
+        : `${apiService.API_BASE.replace('/api/v1/public', '')}/api/nutrition/calculate`;
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiService.getHeaders(),
         body: JSON.stringify({ ingredients })
       });
 
