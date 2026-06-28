@@ -25,8 +25,16 @@ const getApiBase = () => {
   return '/api';
 };
 
+const getApiKey = () => {
+  const envKey = import.meta.env.VITE_DISHALCHEMISTS_API_KEY;
+  if (!envKey || envKey.trim() === '' || envKey.trim() === 'YOUR_API_KEY_HERE') {
+    return 'alchemist-app-secret-2024';
+  }
+  return envKey;
+};
+
 const API_BASE = getApiBase();
-const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || 'alchemist-app-secret-2024';
+const API_KEY = getApiKey();
 
 export const apiService = {
   API_BASE,
