@@ -3,6 +3,7 @@ import express from 'express';
 import sqlite3 from 'sqlite3';
 import cors from 'cors'; // Opcional: caso o Vite precise rodar em portas separadas sem proxy
 import dotenv from 'dotenv';
+import { NutritionalEngineService } from './src/services/NutritionalEngineService';
 
 dotenv.config();
 
@@ -116,6 +117,24 @@ app.get('/api/ingredients', async (req, res) => {
     } catch (err: any) {
         console.error("Erro ao buscar ingredientes do DishAlchemists:", err.message);
         res.status(500).json({ error: "Falha na comunicação com DishAlchemists" });
+    }
+});
+
+// ==========================================
+// Rota de Motor Nutricional (Cálculo)
+// ==========================================
+app.post('/api/nutrition/calculate', async (req, res) => {
+    try {
+        const { ingredients } = req.body;
+        if (!ingredients || !Array.isArray(ingredients)) {
+            return res.status(400).json({ error: "Campo 'ingredients' inválido ou ausente. Precisa ser um array." });
+        }
+        
+        const result = await NutritionalEngineService.calculateRecipeNutrition(ingredients);
+        res.json(result);
+    } catch (err: any) {
+        console.error("Erro no motor nutricional:", err.message);
+        res.status(500).json({ error: "Erro interno no cálculo nutricional" });
     }
 });
 
