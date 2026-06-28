@@ -82,18 +82,8 @@ export default function ShoppingList({ familyId }: ShoppingListProps) {
   };
 
   const generateFromPlan = async () => {
-    setToastMessage("Analisando protocolo semanal e gerando insumos...");
-    setTimeout(() => {
-      const generated: ShoppingItem[] = [
-        { id: Date.now() + "1", name: "Ovos Orgânicos", category: "Laticínios & Ovos", quantity: "1 dúzia", completed: false, isManual: true },
-        { id: Date.now() + "2", name: "Salmão", category: "Produtos Genéricos", quantity: "500g", completed: false, isManual: true }
-      ];
-      const newItems = [...items, ...generated];
-      setItems(newItems);
-      saveList(newItems);
-      setToastMessage("Lista atualizada com sucesso!");
-      setTimeout(() => setToastMessage(null), 4000);
-    }, 1500);
+    setToastMessage("Sincronização em tempo real ativa! Seus ingredientes são atualizados conforme o Cardápio.");
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const completedCount = items.filter((item) => item.completed).length;

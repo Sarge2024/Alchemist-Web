@@ -2,6 +2,9 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { WeeklyPlan, Recipe } from '../types';
 
+import { ShoppingItem, ShoppingListDoc } from '../types';
+import { shoppingService } from './shoppingService';
+
 export const plannerService = {
   // Gera um ID de semana baseado na data atual (ex: 2026-W26)
   getCurrentWeekId(): string {
@@ -44,17 +47,181 @@ export const plannerService = {
     }
   },
 
-  // Cria ou atualiza um plano semanal inteiro
-  async saveWeeklyPlan(plan: WeeklyPlan): Promise<void> {
+  // Cria ou atualiza um plano semanal inteiro (normalizando sobras e atualizando a lista de compras)
+  async saveWeeklyPlan(plan: WeeklyPlan): Promise<WeeklyPlan> {
     if (!db) throw new Error("Firestore não inicializado");
     try {
-      const planRef = doc(db, `families/${plan.familyId}/weeklyPlans`, `${plan.profileId}_${plan.id}`);
-      await setDoc(planRef, { ...plan, updatedAt: Date.now() }, { merge: true });
+      const normalizedPlan = this.normalizeLeftovers(plan);
+      const planRef = doc(db, `families/${normalizedPlan.familyId}/weeklyPlans`, `${normalizedPlan.profileId}_${normalizedPlan.id}`);
+      await setDoc(planRef, { ...normalizedPlan, updatedAt: Date.now() }, { merge: true });
+      
+      // Sincroniza a lista de compras em segundo plano
+      await this.syncShoppingList(normalizedPlan.familyId, normalizedPlan);
+      
+      return normalizedPlan;
     } catch (error) {
       console.error("Erro ao salvar plano semanal:", error);
       throw error;
     }
   },
+
+  // Normaliza as propriedades de sobras dos slots de receita baseando-se na repetição e prepMode
+  normalizeLeftovers(plan: WeeklyPlan): WeeklyPlan {
+    const newPlan = JSON.parse(JSON.stringify(plan)) as WeeklyPlan;
+    
+    // Para cada refeição (meal) e cada prato (course)
+    for (let m = 0; m < 4; m++) {
+      for (let c = 0; c < 4; c++) {
+        for (let d = 0; d < newPlan.days.length; d++) {
+          const currentCourse = newPlan.days[d].meals[m].courses[c];
+          
+          if (!currentCourse.recipe) {
+            currentCourse.isLeftover = false;
+            currentCourse.sourceDayName = undefined;
+            continue;
+          }
+          
+          if (d === 0) {
+            currentCourse.isLeftover = false;
+            currentCourse.sourceDayName = undefined;
+          } else {
+            const prevCourse = newPlan.days[d - 1].meals[m].courses[c];
+            const prevRecipe = prevCourse.recipe;
+            
+            if (prevRecipe && prevRecipe.id === currentCourse.recipe.id && currentCourse.prepMode !== "daily") {
+              currentCourse.isLeftover = true;
+              
+              // Encontra o dia original da preparação no lote (primeiro dia do lote)
+              let sourceDayIndex = d - 1;
+              while (sourceDayIndex > 0 && newPlan.days[sourceDayIndex].meals[m].courses[c].isLeftover) {
+                sourceDayIndex--;
+              }
+              currentCourse.sourceDayName = newPlan.days[sourceDayIndex].dayName;
+            } else {
+              currentCourse.isLeftover = false;
+              currentCourse.sourceDayName = undefined;
+            }
+          }
+        }
+      }
+    }
+    return newPlan;
+  },
+
+  // Sincroniza a lista de compras, gerando ingredientes com base no plano semanal e no prepMode
+  async syncShoppingList(familyId: string, plan: WeeklyPlan): Promise<void> {
+    try {
+      let shoppingListDoc = await shoppingService.getShoppingList(familyId);
+      if (!shoppingListDoc) {
+        shoppingListDoc = {
+          id: "main_list",
+          familyId,
+          items: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      }
+
+      // Mantém apenas os itens adicionados manualmente
+      const manualItems = (shoppingListDoc.items || []).filter(item => item.isManual);
+
+      // Mapa para agrupar ingredientes gerados: chave (nome_unidade) -> dados acumulados
+      const generatedMap = new Map<string, { name: string; category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos"; value: number; unit: string }>();
+
+      for (let d = 0; d < plan.days.length; d++) {
+        const day = plan.days[d];
+        for (let m = 0; m < day.meals.length; m++) {
+          const meal = day.meals[m];
+          for (let c = 0; c < meal.courses.length; c++) {
+            const course = meal.courses[c];
+            
+            // Só computamos compras se houver receita e NÃO for sobra de outro dia
+            if (course.recipe && !course.isLeftover) {
+              // Descobre quantos dias essa receita vai cobrir em lote (dias seguidos marcados como sobra)
+              let relativeMultiplier = 1;
+              let nextD = d + 1;
+              while (
+                nextD < plan.days.length &&
+                plan.days[nextD].meals[m].courses[c].recipe?.id === course.recipe.id &&
+                plan.days[nextD].meals[m].courses[c].isLeftover
+              ) {
+                relativeMultiplier++;
+                nextD++;
+              }
+
+              // Multiplicador final = dias de consumo (lote) * escala de porções
+              const scaleFactor = plan.portionScale / 2;
+              const finalMultiplier = relativeMultiplier * scaleFactor;
+
+              const ingredients = course.recipe.ingredients || [];
+              for (const ing of ingredients) {
+                if (!ing.name) continue;
+                const name = ing.name;
+                const rawQty = ing.quantity || 0;
+                const unit = ing.unit || "";
+                
+                const normalizedUnit = unit.trim().toLowerCase();
+                const key = `${name.toLowerCase().trim()}_${normalizedUnit}`;
+                const increment = rawQty * finalMultiplier;
+
+                if (generatedMap.has(key)) {
+                  const existing = generatedMap.get(key)!;
+                  existing.value += increment;
+                } else {
+                  const lowerName = name.toLowerCase();
+                  let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
+                  if (lowerName.includes("ovo") || lowerName.includes("leite") || lowerName.includes("queijo") || lowerName.includes("manteiga")) {
+                    category = "Laticínios & Ovos";
+                  } else if (
+                    lowerName.includes("cenoura") ||
+                    lowerName.includes("cebola") ||
+                    lowerName.includes("alho") ||
+                    lowerName.includes("batata") ||
+                    lowerName.includes("fruta") ||
+                    lowerName.includes("abacate") ||
+                    lowerName.includes("alface") ||
+                    lowerName.includes("tomate") ||
+                    lowerName.includes("salada")
+                  ) {
+                    category = "Hortifruti";
+                  }
+
+                  generatedMap.set(key, {
+                    name,
+                    category,
+                    value: increment,
+                    unit
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Converte o mapa consolidado para ShoppingItem[]
+      const generatedItems: ShoppingItem[] = Array.from(generatedMap.values()).map((ing, i) => {
+        const roundedValue = Math.round(ing.value * 10) / 10;
+        return {
+          id: `gen_${i}_${Date.now()}`,
+          name: ing.name,
+          category: ing.category,
+          quantity: `${roundedValue} ${ing.unit}`.trim(),
+          completed: false,
+          isManual: false
+        };
+      });
+
+      await shoppingService.saveShoppingList({
+        ...shoppingListDoc,
+        items: [...manualItems, ...generatedItems],
+        updatedAt: Date.now()
+      });
+
+    } catch (e) {
+      console.error("Erro ao sincronizar lista de compras:", e);
+    }
+  }
 
   // Helper: Gera um plano semanal vazio para a semana atual
   generateEmptyPlan(familyId: string, profileId: string, weekId: string): WeeklyPlan {

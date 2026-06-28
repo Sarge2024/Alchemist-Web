@@ -153,48 +153,6 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
       if (planUpdated) {
         await plannerService.saveWeeklyPlan({ ...plan, days: newDays });
       }
-
-      // Update ShoppingList
-      let shoppingListDoc = await shoppingService.getShoppingList(familyId);
-      if (!shoppingListDoc) {
-        shoppingListDoc = {
-          id: "main_list",
-          familyId,
-          items: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        };
-      }
-
-      let newItems = [...shoppingListDoc.items];
-      if (isAdding) {
-        const ingredientsToAdd: ShoppingItem[] = (recipeObj.ingredients || []).map((ing, i) => {
-          const lowerName = ing.name?.toLowerCase() || "";
-          let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
-          if (lowerName.includes("ovo") || lowerName.includes("leite") || lowerName.includes("queijo") || lowerName.includes("manteiga")) {
-            category = "Laticínios & Ovos";
-          } else if (lowerName.includes("cenoura") || lowerName.includes("cebola") || lowerName.includes("alho") || lowerName.includes("batata") || lowerName.includes("fruta") || lowerName.includes("abacate")) {
-            category = "Hortifruti";
-          }
-          
-          return {
-            id: `${recipeId}_${ing.ingredientId || i}_${Date.now()}`,
-            name: ing.name || "Ingrediente Desconhecido",
-            category,
-            quantity: `${ing.quantity} ${ing.unit}`,
-            completed: false,
-            isManual: false,
-            recipeId: recipeId
-          };
-        });
-        newItems = [...newItems, ...ingredientsToAdd];
-      } else {
-        // Remover todos os itens vinculados a essa recipeId
-        newItems = newItems.filter(item => item.recipeId !== recipeId);
-      }
-
-      await shoppingService.saveShoppingList({ ...shoppingListDoc, items: newItems });
-
     } catch (e) {
       console.error("Erro ao integrar com Cardápio/Compras:", e);
       // Revert in case of failure

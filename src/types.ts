@@ -70,6 +70,7 @@ export interface Recipe {
   prepTime?: string;
   nutrition: RecipeNutrition;
   ingredients?: RecipeIngredient[];
+  defaultDurabilityDays?: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -91,6 +92,10 @@ export interface RecipeCategories {
 export interface CourseSlot {
   type: "Entrada" | "Prato Principal" | "Sobremesa" | "Bebida";
   recipe?: Recipe;
+  isLeftover?: boolean;
+  sourceDayName?: string;
+  prepMode?: "batch" | "daily";
+  durabilityDays?: number;
 }
 
 export interface MealPlan {
@@ -103,6 +108,7 @@ export interface WeeklyPlanDay {
   dateStr: string;
   subtitle: string;
   meals: MealPlan[];
+  isClosed?: boolean;
 }
 
 export interface ShoppingItem {
