@@ -1,10 +1,9 @@
 // src/services/apiService.ts
 import { Recipe, PaginatedResponse, RecipeCategories } from "../types";
 
-// Base URL para o BFF (BFF lida com a chave x-api-key e o proxy)
-// Em produção (Vercel), podemos usar a URL direta do backend configurada via VITE_DISHALCHEMISTS_API_BASE
-const API_BASE = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
-const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || '';
+// Todas as requisições passam pelo BFF (proxy Vite → server.ts :3001)
+// O BFF injeta o x-api-key server-side — a API Key NUNCA é exposta no browser
+const API_BASE = '/api';
 
 export const apiService = {
   getHeaders(firebaseToken?: string) {
@@ -14,9 +13,7 @@ export const apiService = {
     if (firebaseToken) {
       headers['Authorization'] = `Bearer ${firebaseToken}`;
     }
-    if (API_KEY && API_BASE !== '/api') {
-      headers['x-api-key'] = API_KEY;
-    }
+    // x-api-key é injetado pelo BFF server-side, não pelo cliente
     return headers;
   },
 
@@ -49,10 +46,7 @@ export const apiService = {
 
   async searchRecipes(query: string, limit = 10, firebaseToken?: string): Promise<{ data: Recipe[], total: number }> {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
-    const isBff = API_BASE === '/api';
-    const url = isBff 
-      ? `${API_BASE}/recipes/search?${params.toString()}` 
-      : `${API_BASE}/search?${params.toString()}`;
+    const url = `${API_BASE}/recipes/search?${params.toString()}`;
     const res = await fetch(url, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro na busca: ${res.statusText}`);
     return res.json();
