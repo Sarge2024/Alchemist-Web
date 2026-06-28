@@ -87,11 +87,21 @@ export interface RecipeCategories {
   momento: string[];
 }
 
+export interface CourseSlot {
+  type: "Entrada" | "Prato Principal" | "Sobremesa" | "Bebida";
+  recipe?: Recipe;
+}
+
+export interface MealPlan {
+  name: "Café da Manhã" | "Almoço" | "Jantar" | "Ceia";
+  courses: CourseSlot[];
+}
+
 export interface WeeklyPlanDay {
   dayName: string;
   dateStr: string;
   subtitle: string;
-  recipe?: Recipe;
+  meals: MealPlan[];
 }
 
 export interface ShoppingItem {

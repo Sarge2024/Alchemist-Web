@@ -19,7 +19,23 @@ export const plannerService = {
       const planRef = doc(db, `families/${familyId}/weeklyPlans`, `${profileId}_${weekId}`);
       const snap = await getDoc(planRef);
       if (snap.exists()) {
-        return snap.data() as WeeklyPlan;
+        let plan = snap.data() as WeeklyPlan;
+        
+        // Fallback para planos antigos
+        const hasMeals = plan.days.every(d => d.meals && Array.isArray(d.meals));
+        if (!hasMeals) {
+          console.warn("Plano antigo detectado. Migrando para estrutura de meals...");
+          plan.days = plan.days.map(d => ({
+            ...d,
+            meals: [
+              { name: "Café da Manhã", courses: [{ type: "Entrada" }, { type: "Prato Principal", recipe: (d as any).recipe }, { type: "Sobremesa" }, { type: "Bebida" }] },
+              { name: "Almoço", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] },
+              { name: "Jantar", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] },
+              { name: "Ceia", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] }
+            ]
+          }));
+        }
+        return plan;
       }
       return null;
     } catch (error) {
@@ -55,7 +71,25 @@ export const plannerService = {
       return {
         dayName,
         dateStr: d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }),
-        subtitle: 'Ativo'
+        subtitle: 'Ativo',
+        meals: [
+          {
+            name: "Café da Manhã",
+            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+          },
+          {
+            name: "Almoço",
+            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+          },
+          {
+            name: "Jantar",
+            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+          },
+          {
+            name: "Ceia",
+            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+          }
+        ] as any[]
       };
     });
 

@@ -100,9 +100,6 @@ export default function ShoppingList({ familyId }: ShoppingListProps) {
   const totalCount = items.length;
   const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const hortifrutiItems = items.filter((item) => item.category === "Hortifruti");
-  const dairyItems = items.filter((item) => item.category === "Laticínios & Ovos");
-  const genericItems = items.filter((item) => item.category === "Produtos Genéricos");
 
   return (
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-12">
@@ -135,200 +132,57 @@ export default function ShoppingList({ familyId }: ShoppingListProps) {
         </form>
       </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="bg-lab-white/40 border border-outline-variant/30 rounded-xl p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <h4 className="font-serif text-md font-bold text-primary mb-1 pb-2 border-b border-outline-variant/20">
-              Hortifruti
-            </h4>
-            <p className="font-sans text-[10px] text-scientific-gray uppercase tracking-wider mb-4 font-semibold">
-              Orgânicos & Selecionados
-            </p>
-
-            <div className="space-y-3">
-              <AnimatePresence>
-                {hortifrutiItems.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="flex items-center justify-between py-1 border-b border-outline-variant/10 group"
-                  >
-                    <div
-                      onClick={() => toggleItem(item.id)}
-                      className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0"
-                    >
-                      <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors">
-                        {item.completed ? (
-                          <div className="w-4.5 h-4.5 rounded bg-secondary flex items-center justify-center text-white">
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          </div>
-                        ) : (
-                          <div className="w-4.5 h-4.5 rounded border border-outline-variant/80 bg-white" />
-                        )}
-                      </button>
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`font-sans text-xs font-medium leading-tight truncate ${
-                            item.completed ? "text-scientific-gray line-through" : "text-primary"
-                          }`}
-                        >
-                          {item.name}
-                        </span>
-                        {item.quantity && (
-                          <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                            {item.quantity}
-                          </span>
-                        )}
+      <section className="bg-lab-white/40 border border-outline-variant/30 rounded-xl p-6 shadow-sm">
+        <div className="space-y-3">
+          <AnimatePresence>
+            {[...items].sort((a, b) => a.category.localeCompare(b.category)).map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="flex items-center justify-between py-2 border-b border-outline-variant/10 group last:border-0"
+              >
+                <div
+                  onClick={() => toggleItem(item.id)}
+                  className="flex items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
+                >
+                  <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors flex-shrink-0">
+                    {item.completed ? (
+                      <div className="w-5 h-5 rounded bg-secondary flex items-center justify-center text-white">
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       </div>
-                    </div>
-                    {item.isManual && (
-                      <button
-                        onClick={() => deleteItem(item.id)}
-                        className="text-outline hover:text-error transition-colors focus:outline-none"
-                        title="Remover item"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    ) : (
+                      <div className="w-5 h-5 rounded border border-outline-variant/80 bg-white" />
                     )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {hortifrutiItems.length === 0 && (
-                <p className="font-sans text-xs text-scientific-gray italic py-4">Nenhum ingrediente.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Category 2: Laticínios */}
-        <div className="bg-lab-white/40 border border-outline-variant/30 rounded-xl p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <h4 className="font-serif text-md font-bold text-primary mb-1 pb-2 border-b border-outline-variant/20">
-              Laticínios & Ovos
-            </h4>
-            <p className="font-sans text-[10px] text-scientific-gray uppercase tracking-wider mb-4 font-semibold">
-              Lácteos Curados & Caipiras
-            </p>
-
-            <div className="space-y-3">
-              <AnimatePresence>
-                {dairyItems.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="flex items-center justify-between py-1 border-b border-outline-variant/10 group"
-                  >
-                    <div
-                      onClick={() => toggleItem(item.id)}
-                      className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0"
+                  </button>
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-4 flex-1 pr-4">
+                    <span
+                      className={`font-sans text-sm font-medium leading-tight truncate ${
+                        item.completed ? "text-scientific-gray line-through" : "text-primary"
+                      }`}
                     >
-                      <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors">
-                        {item.completed ? (
-                          <div className="w-4.5 h-4.5 rounded bg-secondary flex items-center justify-center text-white">
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          </div>
-                        ) : (
-                          <div className="w-4.5 h-4.5 rounded border border-outline-variant/80 bg-white" />
-                        )}
-                      </button>
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`font-sans text-xs font-medium leading-tight truncate ${
-                            item.completed ? "text-scientific-gray line-through" : "text-primary"
-                          }`}
-                        >
-                          {item.name}
-                        </span>
-                        {item.quantity && (
-                          <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                            {item.quantity}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {item.isManual && (
-                      <button
-                        onClick={() => deleteItem(item.id)}
-                        className="text-outline hover:text-error transition-colors focus:outline-none"
-                        title="Remover item"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {item.name}
+                    </span>
+                    {item.quantity && (
+                      <span className={`font-sans text-xs w-20 text-right ${item.completed ? "text-scientific-gray/60" : "text-scientific-gray"}`}>
+                        {item.quantity}
+                      </span>
                     )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {dairyItems.length === 0 && (
-                <p className="font-sans text-xs text-scientific-gray italic py-4">Nenhum ingrediente.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Category 3: Produtos Genéricos */}
-        <div className="bg-lab-white/40 border border-outline-variant/30 rounded-xl p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <h4 className="font-serif text-md font-bold text-primary mb-1 pb-2 border-b border-outline-variant/20">
-              Produtos Genéricos
-            </h4>
-            <p className="font-sans text-[10px] text-scientific-gray uppercase tracking-wider mb-4 font-semibold">
-              Utilidades & Condimentos
-            </p>
-
-            <div className="space-y-3">
-              <AnimatePresence>
-                {genericItems.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="flex items-center justify-between py-1 border-b border-outline-variant/10 group"
-                  >
-                    <div
-                      onClick={() => toggleItem(item.id)}
-                      className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0"
-                    >
-                      <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors">
-                        {item.completed ? (
-                          <div className="w-4.5 h-4.5 rounded bg-secondary flex items-center justify-center text-white">
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          </div>
-                        ) : (
-                          <div className="w-4.5 h-4.5 rounded border border-outline-variant/80 bg-white" />
-                        )}
-                      </button>
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`font-sans text-xs font-medium leading-tight truncate ${
-                            item.completed ? "text-scientific-gray line-through" : "text-primary"
-                          }`}
-                        >
-                          {item.name}
-                        </span>
-                        {item.quantity && (
-                          <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                            {item.quantity}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => deleteItem(item.id)}
-                      className="text-outline hover:text-error opacity-70 hover:opacity-100 transition-all focus:outline-none"
-                      title="Remover item"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {genericItems.length === 0 && (
-                <p className="font-sans text-xs text-scientific-gray italic py-4">Nenhum produto genérico cadastrado.</p>
-              )}
-            </div>
-          </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteItem(item.id)}
+                  className="text-outline hover:text-error transition-colors focus:outline-none flex-shrink-0 p-1"
+                  title="Remover item"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {items.length === 0 && (
+            <p className="font-sans text-sm text-scientific-gray italic py-4 text-center">A lista de compras está vazia.</p>
+          )}
         </div>
       </section>
     </motion.div>

@@ -129,9 +129,9 @@ export default function RecipeDetail({ recipeId, onBack }: RecipeDetailProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="space-y-4">
         {/* Ingredients Column */}
-        <div className="md:col-span-1 space-y-4">
+        <div className="space-y-4 max-w-2xl mx-auto">
           <h3 className="font-serif text-xl font-bold text-primary flex items-center gap-2 border-b border-outline-variant/30 pb-3">
             <Scale className="w-5 h-5 text-secondary" />
             Ingredientes
@@ -149,29 +149,6 @@ export default function RecipeDetail({ recipeId, onBack }: RecipeDetailProps) {
               <p className="text-sm text-scientific-gray italic">Nenhum ingrediente catalogado.</p>
             )}
           </ul>
-        </div>
-
-        {/* Instructions Column */}
-        <div className="md:col-span-2 space-y-4">
-          <h3 className="font-serif text-xl font-bold text-primary flex items-center gap-2 border-b border-outline-variant/30 pb-3">
-            <ChefHat className="w-5 h-5 text-gold-leaf" />
-            Modo de Preparo
-          </h3>
-          <div className="space-y-6 pt-2">
-            {recipe.instructions?.map((step, idx) => (
-              <div key={idx} className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-sage-wash text-primary rounded-full flex items-center justify-center font-serif font-bold text-sm">
-                  {idx + 1}
-                </div>
-                <p className="font-sans text-sm text-on-surface-variant leading-relaxed pt-1">
-                  {step}
-                </p>
-              </div>
-            ))}
-            {(!recipe.instructions || recipe.instructions.length === 0) && (
-              <p className="text-sm text-scientific-gray italic">Protocolo de preparo não especificado.</p>
-            )}
-          </div>
         </div>
       </div>
     </motion.div>
