@@ -2,14 +2,20 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { registerSW } from 'virtual:pwa-register';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './firebase/config';
 import { Login } from './components/Login';
 import { userService } from './services/userService';
 import { Profile } from './types';
 
-registerSW({ immediate: true });
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+      console.log('Service Worker unregistered to clear cache');
+    }
+  });
+}
 
 function Root() {
   const [user, setUser] = useState<User | null>(null);
