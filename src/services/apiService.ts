@@ -6,20 +6,27 @@ import { Recipe, PaginatedResponse, RecipeCategories } from "../types";
 // Base URL para o BFF (BFF lida com a chave x-api-key e o proxy)
 // Em produção (Vercel), podemos usar a URL direta do backend configurada via VITE_DISHALCHEMISTS_API_BASE
 const getApiBase = () => {
-  const base = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
-  if (base !== '/api') {
-    if (base.endsWith('/api')) {
-      return `${base}/v1/public`;
+  const envBase = import.meta.env.VITE_DISHALCHEMISTS_API_BASE;
+  if (envBase) {
+    if (envBase.endsWith('/api')) {
+      return `${envBase}/v1/public`;
     }
-    if (base.endsWith('/api/')) {
-      return `${base}v1/public`;
+    if (envBase.endsWith('/api/')) {
+      return `${envBase}v1/public`;
     }
+    return envBase;
   }
-  return base;
+  
+  // Se estiver rodando na Vercel (ou qualquer outro host de produção), direcionamos para o domínio de produção oficial
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://dishalchemists.com/api/v1/public';
+  }
+  
+  return '/api';
 };
 
 const API_BASE = getApiBase();
-const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || '';
+const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || 'alchemist-app-secret-2024';
 
 export const apiService = {
   API_BASE,
