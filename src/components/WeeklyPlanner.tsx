@@ -186,6 +186,11 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   dailyProtein = Math.round(dailyProtein * (weeklyPlan.portionScale / 2));
   dailyCarbs = Math.round(dailyCarbs * (weeklyPlan.portionScale / 2));
 
+  const isDayClosed = weeklyPlan.days[selectedDayIndex].isClosed;
+  const targetCalories = activeProfile?.dailyCalories || 2000;
+  const targetProtein = Math.round((targetCalories * (activeProfile?.proteinPercentage || 30) / 100) / 4);
+  const targetCarbs = Math.round((targetCalories * (activeProfile?.carbsPercentage || 40) / 100) / 4);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}

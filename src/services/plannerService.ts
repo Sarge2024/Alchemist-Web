@@ -221,7 +221,7 @@ export const plannerService = {
     } catch (e) {
       console.error("Erro ao sincronizar lista de compras:", e);
     }
-  }
+  },
 
   // Helper: Gera um plano semanal vazio para a semana atual
   generateEmptyPlan(familyId: string, profileId: string, weekId: string): WeeklyPlan {
