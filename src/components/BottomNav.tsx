@@ -9,8 +9,8 @@ interface BottomNavProps {
 export default function BottomNav({ activeView, onViewChange }: BottomNavProps) {
   const menuItems = [
     { view: ActiveView.DASHBOARD, label: "Painel", icon: LayoutDashboard },
-    { view: ActiveView.PLANNER, label: "Cardápio", icon: Calendar },
     { view: ActiveView.RECIPES, label: "Receitas", icon: BookOpen },
+    { view: ActiveView.PLANNER, label: "Cardápio", icon: Calendar },
     { view: ActiveView.SHOPPING, label: "Compras", icon: ShoppingCart },
     { view: ActiveView.FAMILY, label: "Família", icon: Users },
     { view: ActiveView.HISTORY, label: "Histórico", icon: History }

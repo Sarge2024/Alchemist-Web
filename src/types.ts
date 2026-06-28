@@ -46,17 +46,45 @@ export interface Profile {
   medications: string; // text description
 }
 
+export interface RecipeNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface RecipeIngredient {
+  ingredientId?: string;
+  name?: string;
+  quantity: number;
+  unit: string;
+}
+
 export interface Recipe {
   id: string;
-  name: string;
+  title: string;
+  description: string;
   image: string;
-  category: string; // "CETOGÊNICA", "ALTA PROTEÍNA", "BAIXO CARBO", "SEM AÇÚCAR", "VEGAN"
-  calories: number;
-  protein: number; // g
-  carbs: number; // g
-  fat: number; // g
-  description?: string;
-  prepTime?: string;
+  category: string;
+  difficulty?: string;
+  nutrition: RecipeNutrition;
+  ingredients: RecipeIngredient[];
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+export interface RecipeCategories {
+  tipo_prato: string[];
+  base_alimento: string[];
+  momento: string[];
 }
 
 export interface WeeklyPlanDay {
@@ -73,6 +101,7 @@ export interface ShoppingItem {
   quantity?: string;
   completed: boolean;
   isManual?: boolean;
+  recipeId?: string;
 }
 
 export interface Invite {

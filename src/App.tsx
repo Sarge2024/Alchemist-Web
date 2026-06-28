@@ -100,7 +100,12 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           />
         );
       case ActiveView.RECIPES:
-        return <RecipeList />;
+        return (
+          <RecipeList 
+            familyId={familyId || null} 
+            activeProfileId={activeProfileId} 
+          />
+        );
       case ActiveView.SHOPPING:
         return (
           <ShoppingList 
@@ -125,7 +130,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           />
         );
       default:
-        return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} />;
+        return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} familyId={familyId} activeProfileId={activeProfileId} />;
     }
   };
 

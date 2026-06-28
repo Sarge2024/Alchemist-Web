@@ -1,75 +1,195 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, SlidersHorizontal, PlusCircle, Check, Info } from "lucide-react";
 import { Recipe } from "../types";
-import { dishAlchemistsService, DishRecipe } from "../services/dishAlchemistsService";
+import { apiService } from "../services/apiService";
+import RecipeDetail from "./RecipeDetail";
 
-export default function RecipeList() {
+import { plannerService } from "../services/plannerService";
+import { shoppingService } from "../services/shoppingService";
+import { ShoppingItem } from "../types";
+
+interface RecipeListProps {
+  familyId?: string | null;
+  activeProfileId?: string | null;
+}
+
+export default function RecipeList({ familyId, activeProfileId }: RecipeListProps) {
   const [searchQuery, setSearchInput] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("TODAS");
-  const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
+  const [menuRecipes, setMenuRecipes] = useState<Set<string>>(new Set());
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   
-  // Estado para armazenar as receitas vindas da API
+  // States para a API
   const [apiRecipes, setApiRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const categories = ["TODAS", "ALTA PROTEÍNA", "CETOGÊNICA", "BAIXO CARBO", "VEGAN", "SEM AÇÚCAR"];
-
+  // Debounce do search
   useEffect(() => {
-    async function loadRecipes() {
-      setLoading(true);
-      try {
-        const data: DishRecipe[] = await dishAlchemistsService.getRecipes();
-        
-        // Mapeando do formato DishRecipe (API) para o formato Recipe (UI local)
-        const mappedRecipes: Recipe[] = data.map(apiRecipe => ({
-          id: apiRecipe.id,
-          name: apiRecipe.title,
-          description: apiRecipe.description,
-          category: apiRecipe.category,
-          calories: apiRecipe.total_nutrition?.calories || 0,
-          protein: apiRecipe.total_nutrition?.protein || 0,
-          carbs: apiRecipe.total_nutrition?.carbs || 0,
-          fat: apiRecipe.total_nutrition?.fat || 0,
-          image: apiRecipe.image_url,
-          tags: [apiRecipe.category]
-        }));
-        
-        setApiRecipes(mappedRecipes);
-      } catch (err) {
-        console.error("Erro ao carregar receitas:", err);
-      } finally {
-        setLoading(false);
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const [apiCategories, setApiCategories] = useState<import("../types").RecipeCategories | null>(null);
+
+  // Carregar categorias
+  useEffect(() => {
+    apiService.getCategories().then((res) => {
+      if (res) {
+        setApiCategories(res);
       }
-    }
-    
-    loadRecipes();
+    }).catch(console.error);
   }, []);
 
-  const handleAddRecipe = (recipeId: string) => {
-    setAddedRecipeId(recipeId);
-    setTimeout(() => {
-      setAddedRecipeId(null);
-    }, 3000);
+  // Fetch das receitas
+  const fetchRecipes = useCallback(async (isLoadMore = false) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const response = await apiService.getRecipes({
+        page: isLoadMore ? page + 1 : 1,
+        limit: 12,
+        search: debouncedSearch,
+        category: selectedCategory
+      });
+      
+      if (isLoadMore) {
+        setApiRecipes(prev => [...prev, ...response.data]);
+        setPage(page + 1);
+      } else {
+        setApiRecipes(response.data);
+        setPage(1);
+      }
+      
+      setTotalPages(response.pagination.totalPages);
+    } catch (err) {
+      console.error("Erro ao carregar receitas:", err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [debouncedSearch, selectedCategory, page]);
+
+  useEffect(() => {
+    fetchRecipes(false);
+  }, [debouncedSearch, selectedCategory]);
+
+  const handleToggleMenu = async (recipeId: string) => {
+    // Optimistic UI update
+    const isAdding = !menuRecipes.has(recipeId);
+    setMenuRecipes((prev) => {
+      const newSet = new Set(prev);
+      if (isAdding) newSet.add(recipeId);
+      else newSet.delete(recipeId);
+      return newSet;
+    });
+
+    if (!familyId || !activeProfileId) return;
+
+    try {
+      const weekId = plannerService.getCurrentWeekId();
+      let plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
+      if (!plan) {
+        plan = plannerService.generateEmptyPlan(familyId, activeProfileId, weekId);
+      }
+
+      const recipeObj = apiRecipes.find(r => r.id === recipeId);
+      if (!recipeObj) return;
+
+      // Update WeeklyPlan
+      let planUpdated = false;
+      const newDays = [...plan.days];
+      if (isAdding) {
+        // Encontrar primeiro dia vazio
+        const emptyIndex = newDays.findIndex(d => !d.recipe);
+        if (emptyIndex !== -1) {
+          newDays[emptyIndex] = { ...newDays[emptyIndex], recipe: recipeObj };
+          planUpdated = true;
+        }
+      } else {
+        // Remover receita do plano
+        const recIndex = newDays.findIndex(d => d.recipe?.id === recipeId);
+        if (recIndex !== -1) {
+          newDays[recIndex] = { ...newDays[recIndex], recipe: undefined };
+          planUpdated = true;
+        }
+      }
+
+      if (planUpdated) {
+        await plannerService.saveWeeklyPlan({ ...plan, days: newDays });
+      }
+
+      // Update ShoppingList
+      let shoppingListDoc = await shoppingService.getShoppingList(familyId);
+      if (!shoppingListDoc) {
+        shoppingListDoc = {
+          id: "main_list",
+          familyId,
+          items: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      }
+
+      let newItems = [...shoppingListDoc.items];
+      if (isAdding) {
+        const ingredientsToAdd: ShoppingItem[] = (recipeObj.ingredients || []).map((ing, i) => {
+          const lowerName = ing.name?.toLowerCase() || "";
+          let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
+          if (lowerName.includes("ovo") || lowerName.includes("leite") || lowerName.includes("queijo") || lowerName.includes("manteiga")) {
+            category = "Laticínios & Ovos";
+          } else if (lowerName.includes("cenoura") || lowerName.includes("cebola") || lowerName.includes("alho") || lowerName.includes("batata") || lowerName.includes("fruta") || lowerName.includes("abacate")) {
+            category = "Hortifruti";
+          }
+          
+          return {
+            id: `${recipeId}_${ing.ingredientId || i}_${Date.now()}`,
+            name: ing.name || "Ingrediente Desconhecido",
+            category,
+            quantity: `${ing.quantity} ${ing.unit}`,
+            completed: false,
+            isManual: false,
+            recipeId: recipeId
+          };
+        });
+        newItems = [...newItems, ...ingredientsToAdd];
+      } else {
+        // Remover todos os itens vinculados a essa recipeId
+        newItems = newItems.filter(item => item.recipeId !== recipeId);
+      }
+
+      await shoppingService.saveShoppingList({ ...shoppingListDoc, items: newItems });
+
+    } catch (e) {
+      console.error("Erro ao integrar com Cardápio/Compras:", e);
+      // Revert in case of failure
+      setMenuRecipes((prev) => {
+        const newSet = new Set(prev);
+        if (isAdding) newSet.delete(recipeId);
+        else newSet.add(recipeId);
+        return newSet;
+      });
+    }
   };
 
-  const filteredRecipes = apiRecipes.filter((recipe) => {
-    const matchesSearch =
-      recipe.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (recipe.description && recipe.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  const handleLoadMore = () => {
+    if (page < totalPages) {
+      fetchRecipes(true);
+    }
+  };
 
-    const matchesCategory =
-      selectedCategory === "TODAS" || recipe.category === selectedCategory;
-
-    return matchesSearch && matchesCategory;
-  });
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-20">
-        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-      </div>
-    );
+  if (selectedRecipeId) {
+    return <RecipeDetail recipeId={selectedRecipeId} onBack={() => setSelectedRecipeId(null)} />;
   }
 
   return (
@@ -80,20 +200,7 @@ export default function RecipeList() {
       transition={{ duration: 0.35 }}
       className="space-y-8 pb-12"
     >
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {addedRecipeId && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
-            exit={{ opacity: 0, y: 20, scale: 0.9, x: "-50%" }}
-            className="fixed bottom-24 md:bottom-10 left-1/2 z-50 bg-primary text-white px-6 py-3.5 rounded-full shadow-2xl border border-primary-fixed/20 flex items-center gap-3 font-sans text-sm"
-          >
-            <Check className="w-5 h-5 text-primary-fixed stroke-[2.5]" />
-            <span>Receita adicionada ao seu cronograma de laboratório!</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* Hero Search Section */}
       <section className="space-y-4 max-w-2xl">
@@ -111,156 +218,141 @@ export default function RecipeList() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar por ingrediente ou meta de macros..."
+            placeholder="Buscar por ingrediente ou receita..."
             className="w-full pl-11 pr-4 py-3.5 bg-lab-white border border-outline-variant/60 rounded-xl focus:border-gold-leaf focus:ring-1 focus:ring-gold-leaf transition-all font-sans text-sm outline-none placeholder:text-outline/70 shadow-sm"
           />
         </div>
       </section>
 
-      {/* Filter Chips Container */}
-      <section className="overflow-x-auto no-scrollbar pb-1">
-        <div className="flex gap-2.5">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-5 py-2 rounded-full font-sans text-xs font-semibold whitespace-nowrap active:scale-95 transition-all focus:outline-none border cursor-pointer ${
-                selectedCategory === cat
-                  ? "bg-primary text-white border-primary shadow-sm"
-                  : "bg-sage-wash/60 text-primary border-outline-variant/30 hover:bg-sage-wash"
-              }`}
-            >
-              {cat === "TODAS" ? "Todas as Formulações" : cat}
-            </button>
-          ))}
-          <button className="px-5 py-2 rounded-full bg-sage-wash/60 text-primary border border-outline-variant/30 font-sans text-xs font-semibold whitespace-nowrap active:scale-95 transition-all flex items-center gap-1.5 focus:outline-none">
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Filtros Avançados</span>
-          </button>
+      {/* Filter Dropdown Container */}
+      <section className="pb-1 flex items-center gap-4">
+        <label htmlFor="category-select" className="font-sans text-sm font-semibold text-primary">
+          Categoria:
+        </label>
+        <div className="relative">
+          <select
+            id="category-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="appearance-none bg-lab-white border border-outline-variant/60 rounded-xl px-4 py-2.5 pr-10 focus:border-gold-leaf focus:ring-1 focus:ring-gold-leaf transition-all font-sans text-sm outline-none shadow-sm cursor-pointer min-w-[200px]"
+          >
+            <option value="TODAS">Todas as Formulações</option>
+            
+            {apiCategories?.tipo_prato && apiCategories.tipo_prato.length > 0 && (
+              <optgroup label="Tipo de Prato">
+                {apiCategories.tipo_prato.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </optgroup>
+            )}
+            
+            {apiCategories?.momento && apiCategories.momento.length > 0 && (
+              <optgroup label="Momento">
+                {apiCategories.momento.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </optgroup>
+            )}
+            
+            {apiCategories?.base_alimento && apiCategories.base_alimento.length > 0 && (
+              <optgroup label="Base Alimentar">
+                {apiCategories.base_alimento.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-scientific-gray">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
         </div>
       </section>
 
-      {/* Recipes Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRecipes.length > 0 ? (
-          filteredRecipes.map((recipe, index) => {
-            // Give " नाइट्रोजन " recipe (Nitrogen-Seared Poultry) a double span in large devices just like the mockup!
-            const isExtended = recipe.id === "rec-poultry";
-
-            return (
-              <article
-                key={recipe.id}
-                className={`bg-lab-white border border-outline-variant/30 rounded-xl overflow-hidden flex flex-col hover:shadow-md transition-all duration-300 ${
-                  isExtended ? "lg:col-span-2 md:flex-row" : ""
-                }`}
-              >
-                {/* Recipe image with overlay category chip */}
-                <div className={`relative overflow-hidden ${isExtended ? "h-64 md:h-full md:w-2/5" : "h-60 w-full"}`}>
-                  <img
-                    src={recipe.image}
-                    alt={recipe.name}
-                    className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full border border-outline-variant/20 shadow-sm">
-                    <span className="font-sans text-[9px] font-bold text-primary tracking-wide">
-                      {recipe.category}
-                    </span>
-                  </div>
+      {/* Simple Recipes List */}
+      <section className="flex flex-col gap-3">
+        {loading ? (
+          /* Skeletons */
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex items-center justify-between animate-pulse">
+              <div className="flex flex-col gap-2 w-1/2">
+                <div className="h-5 bg-outline-variant/20 rounded w-full"></div>
+                <div className="h-3 bg-outline-variant/20 rounded w-1/3"></div>
+              </div>
+              <div className="w-5 h-5 bg-outline-variant/20 rounded"></div>
+            </div>
+          ))
+        ) : apiRecipes.length > 0 ? (
+          apiRecipes.map((recipe) => (
+            <div
+              key={recipe.id}
+              onClick={() => setSelectedRecipeId(recipe.id)}
+              className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex flex-row items-center justify-between hover:shadow-md transition-all duration-300 cursor-pointer group"
+            >
+              <div className="flex flex-col">
+                <h3 className="font-serif text-base font-bold text-primary group-hover:text-gold-leaf transition-colors">
+                  {recipe.title}
+                </h3>
+                <div className="flex gap-2 items-center mt-1">
+                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wide">
+                    {Array.isArray(recipe.category) ? recipe.category.join(", ") : recipe.category || "RECEITA"}
+                  </span>
+                  <span className="text-outline-variant/50">•</span>
+                  <span className="font-sans text-xs text-scientific-gray font-semibold">
+                    {recipe.nutrition?.calories || 0} kcal
+                  </span>
                 </div>
+              </div>
 
-                {/* Recipe details */}
-                <div className={`p-6 flex-1 flex flex-col justify-between ${isExtended ? "md:p-8" : ""}`}>
-                  <div>
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-serif text-lg font-bold text-primary leading-tight">
-                        {recipe.name}
-                      </h3>
-                      <span className="font-serif text-xs font-semibold text-gold-leaf whitespace-nowrap ml-2">
-                        {recipe.calories} kcal
-                      </span>
-                    </div>
-
-                    {recipe.description && (
-                      <p className="font-sans text-xs text-scientific-gray mb-6 leading-relaxed">
-                        {recipe.description}
-                      </p>
-                    )}
-
-                    {/* Nutrient breakdown table */}
-                    <div className="grid grid-cols-3 gap-2 bg-sage-wash/40 p-3.5 rounded border border-outline-variant/10 mb-6">
-                      <div className="text-center">
-                        <p className="font-sans text-[9px] font-semibold text-scientific-gray uppercase tracking-tighter">
-                          PROTEÍNA
-                        </p>
-                        <p className="font-serif text-base font-bold text-primary">{recipe.protein}g</p>
-                      </div>
-                      <div className="text-center border-x border-outline-variant/20">
-                        <p className="font-sans text-[9px] font-semibold text-scientific-gray uppercase tracking-tighter">
-                          CARBOIDRATOS
-                        </p>
-                        <p className="font-serif text-base font-bold text-primary">{recipe.carbs}g</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-sans text-[9px] font-semibold text-scientific-gray uppercase tracking-tighter">
-                          GORDURAS
-                        </p>
-                        <p className="font-serif text-base font-bold text-primary">{recipe.fat}g</p>
-                      </div>
-                    </div>
+              {/* Checkbox Action */}
+              <div className="flex items-center gap-3 pl-4">
+                <label 
+                  className="flex items-center gap-2 cursor-pointer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className={`font-sans text-xs font-bold transition-colors select-none hidden sm:block ${menuRecipes.has(recipe.id) ? "text-primary" : "text-scientific-gray"}`}>
+                    {menuRecipes.has(recipe.id) ? "NO CARDÁPIO" : "ADICIONAR"}
+                  </span>
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={menuRecipes.has(recipe.id)}
+                      onChange={() => handleToggleMenu(recipe.id)}
+                      className="peer appearance-none w-5 h-5 border-2 border-outline-variant rounded-md checked:bg-primary checked:border-primary transition-colors cursor-pointer"
+                    />
+                    <Check className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
                   </div>
-
-                  {/* Add action row */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleAddRecipe(recipe.id)}
-                      className={`flex-1 py-3 font-sans text-xs font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-1.5 focus:outline-none cursor-pointer ${
-                        addedRecipeId === recipe.id
-                          ? "bg-secondary text-white"
-                          : "bg-primary text-white hover:opacity-90 shadow-sm active:scale-[0.98]"
-                      }`}
-                    >
-                      {addedRecipeId === recipe.id ? (
-                        <>
-                          <Check className="w-4 h-4 stroke-[2.5]" />
-                          <span>ADICIONADO</span>
-                        </>
-                      ) : (
-                        <>
-                          <PlusCircle className="w-4.5 h-4.5 text-primary-fixed" />
-                          <span>ADICIONAR AO MENU</span>
-                        </>
-                      )}
-                    </button>
-
-                    {isExtended && (
-                      <button className="px-4 py-3 border border-primary text-primary font-sans text-xs font-bold rounded-lg hover:bg-sage-wash transition-colors">
-                        ESPECIFICAÇÕES
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
-          })
+                </label>
+              </div>
+            </div>
+          ))
         ) : (
-          <div className="col-span-full py-16 text-center bg-lab-white border border-dashed border-outline-variant/50 rounded-xl">
-            <Info className="w-8 h-8 text-scientific-gray mx-auto mb-2" />
+          <div className="py-12 text-center bg-lab-white border border-dashed border-outline-variant/50 rounded-xl">
+            <Info className="w-6 h-6 text-scientific-gray mx-auto mb-2" />
             <p className="font-sans text-sm text-on-surface-variant font-medium">
               Nenhuma receita molecular encontrada para os termos selecionados.
             </p>
-            <button
-              onClick={() => {
-                setSearchInput("");
-                setSelectedCategory("TODAS");
-              }}
-              className="mt-4 px-5 py-2 bg-primary text-white rounded-lg font-sans text-xs font-semibold hover:opacity-90"
-            >
-              Ver Todas as Formulações
-            </button>
           </div>
         )}
       </section>
+
+      {/* Botão Carregar Mais */}
+      {apiRecipes.length > 0 && page < totalPages && (
+        <div className="flex justify-center pt-6">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="px-8 py-3 bg-sage-wash text-primary border border-outline-variant/30 font-sans text-sm font-semibold rounded-full hover:bg-white hover:border-primary/50 transition-all flex items-center justify-center gap-2 min-w-[200px]"
+          >
+            {loadingMore ? (
+              <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            ) : (
+              "Carregar Mais"
+            )}
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }

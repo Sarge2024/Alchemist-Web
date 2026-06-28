@@ -49,10 +49,10 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
           if (todayPlan && todayPlan.recipe) {
             setTodayMeals([{
               id: 'planned-1',
-              name: todayPlan.recipe.name,
+              name: todayPlan.recipe.title,
               description: todayPlan.recipe.description,
               image: todayPlan.recipe.image,
-              calories: todayPlan.recipe.calories,
+              calories: todayPlan.recipe.nutrition?.calories || 0,
               time: "Almoço",
               completed: false
             }]);

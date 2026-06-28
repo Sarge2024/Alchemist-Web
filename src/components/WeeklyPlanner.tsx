@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Plus, Minus, Edit, Sparkles, Check, ArrowRight, Zap, HelpCircle } from "lucide-react";
 import { Recipe, WeeklyPlan } from "../types";
 import { plannerService } from "../services/plannerService";
-import { dishAlchemistsService, DishRecipe } from "../services/dishAlchemistsService";
+import { apiService } from "../services/apiService";
 
 interface WeeklyPlannerProps {
   familyId: string | null;
@@ -32,20 +32,8 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
         setWeeklyPlan(plan);
 
         // Fetch available recipes
-        const apiRecipes: DishRecipe[] = await dishAlchemistsService.getRecipes();
-        const mappedRecipes: Recipe[] = apiRecipes.map(apiRecipe => ({
-          id: apiRecipe.id,
-          name: apiRecipe.title,
-          description: apiRecipe.description,
-          category: apiRecipe.category,
-          calories: apiRecipe.total_nutrition?.calories || 0,
-          protein: apiRecipe.total_nutrition?.protein || 0,
-          carbs: apiRecipe.total_nutrition?.carbs || 0,
-          fat: apiRecipe.total_nutrition?.fat || 0,
-          image: apiRecipe.image_url,
-          tags: [apiRecipe.category]
-        }));
-        setAvailableRecipes(mappedRecipes);
+        const response = await apiService.getRecipes({ limit: 50 });
+        setAvailableRecipes(response.data);
       } catch (err) {
         console.error("Erro ao carregar planejamento:", err);
       } finally {
@@ -234,13 +222,13 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                     <div className="rounded-lg overflow-hidden relative aspect-[4/3] border border-outline-variant/10">
                       <img
                         src={day.recipe.image}
-                        alt={day.recipe.name}
+                        alt={day.recipe.title}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
                         <span className="font-sans text-xs font-semibold text-white leading-tight">
-                          {day.recipe.name}
+                          {day.recipe.title}
                         </span>
                       </div>
                     </div>
@@ -267,7 +255,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                 {day.recipe ? (
                   <>
                     <span className="font-serif text-xs font-semibold text-scientific-gray">
-                      {Math.round(day.recipe.calories * (weeklyPlan.portionScale / 2))} kcal
+                      {Math.round((day.recipe.nutrition?.calories || 0) * (weeklyPlan.portionScale / 2))} kcal
                     </span>
                     <button
                       onClick={() => removeFormula(index)}

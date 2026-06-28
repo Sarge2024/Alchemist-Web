@@ -63,18 +63,26 @@ app.get('/api/alimentos/:id', (req, res) => {
 
 // ==========================================
 // Rota DishAlchemists (Proxy / BFF)
-// Oculta a API Key no backend
+// Consome a API pública do Alchemist via x-api-key
 // ==========================================
-const DISH_API_BASE = process.env.VITE_DISHALCHEMISTS_API_BASE || 'https://dishalchemists.com/api';
+const DISH_API_BASE = process.env.VITE_DISHALCHEMISTS_API_BASE || 'http://localhost:4005/api/v1/public';
 const DISH_API_KEY = process.env.VITE_DISHALCHEMISTS_API_KEY || '';
 
 app.get('/api/recipes', async (req, res) => {
     try {
-        // req.headers.authorization conteria o firebaseToken vindo do Frontend
-        const response = await fetch(`${DISH_API_BASE}/recipes`, {
+        const { limit, page, search, category, difficulty } = req.query;
+        const params = new URLSearchParams();
+        if (limit) params.set('limit', limit as string);
+        if (page) params.set('page', page as string);
+        if (search) params.set('search', search as string);
+        if (category) params.set('category', category as string);
+        if (difficulty) params.set('difficulty', difficulty as string);
+        
+        const url = `${DISH_API_BASE}/recipes${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await fetch(url, {
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${DISH_API_KEY}`
+                'x-api-key': DISH_API_KEY
             }
         });
         if (!response.ok) throw new Error(`API error: ${response.status}`);
@@ -86,12 +94,34 @@ app.get('/api/recipes', async (req, res) => {
     }
 });
 
+app.get('/api/recipes/search', async (req, res) => {
+    try {
+        const { q, limit } = req.query;
+        const params = new URLSearchParams();
+        if (q) params.set('q', q as string);
+        if (limit) params.set('limit', limit as string);
+
+        const response = await fetch(`${DISH_API_BASE}/search?${params.toString()}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': DISH_API_KEY
+            }
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (err: any) {
+        console.error("Erro ao buscar receitas:", err.message);
+        res.status(500).json({ error: "Falha na busca de receitas" });
+    }
+});
+
 app.get('/api/recipes/:id', async (req, res) => {
     try {
         const response = await fetch(`${DISH_API_BASE}/recipes/${req.params.id}`, {
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${DISH_API_KEY}`
+                'x-api-key': DISH_API_KEY
             }
         });
         if (!response.ok) throw new Error(`API error: ${response.status}`);
@@ -103,12 +133,29 @@ app.get('/api/recipes/:id', async (req, res) => {
     }
 });
 
+app.get('/api/categories', async (req, res) => {
+    try {
+        const response = await fetch(`${DISH_API_BASE}/categories`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': DISH_API_KEY
+            }
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (err: any) {
+        console.error("Erro ao buscar categorias:", err.message);
+        res.status(500).json({ error: "Falha ao buscar categorias" });
+    }
+});
+
 app.get('/api/ingredients', async (req, res) => {
     try {
         const response = await fetch(`${DISH_API_BASE}/ingredients`, {
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${DISH_API_KEY}`
+                'x-api-key': DISH_API_KEY
             }
         });
         if (!response.ok) throw new Error(`API error: ${response.status}`);
