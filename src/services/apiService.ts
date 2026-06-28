@@ -49,7 +49,11 @@ export const apiService = {
 
   async searchRecipes(query: string, limit = 10, firebaseToken?: string): Promise<{ data: Recipe[], total: number }> {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
-    const res = await fetch(`${API_BASE}/recipes/search?${params.toString()}`, { headers: this.getHeaders(firebaseToken) });
+    const isBff = API_BASE === '/api';
+    const url = isBff 
+      ? `${API_BASE}/recipes/search?${params.toString()}` 
+      : `${API_BASE}/search?${params.toString()}`;
+    const res = await fetch(url, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro na busca: ${res.statusText}`);
     return res.json();
   },
