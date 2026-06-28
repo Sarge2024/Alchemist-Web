@@ -1,8 +1,8 @@
 // src/services/dishAlchemistsService.ts
 
 // Configurações da API proprietária
-// Agora aponta para a própria API (Express backend)
-const API_BASE = '/api';
+// Agora aponta para a própria API (Express backend). Na Vercel, o VITE_DISHALCHEMISTS_API_BASE deve ser usado se definido.
+const API_BASE = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
 
 // ==========================================
 // INTERFACES (Formato JSON Esperado da API)

@@ -109,6 +109,8 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     await savePlanDebounced(newPlan);
   };
 
+  const [autoAdjusting, setAutoAdjusting] = useState<boolean>(false);
+
   if (loading || !weeklyPlan) {
     return (
       <div className="flex justify-center items-center py-20">
@@ -116,8 +118,6 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       </div>
     );
   }
-  
-  const [autoAdjusting, setAutoAdjusting] = useState<boolean>(false);
 
   return (
     <motion.div
