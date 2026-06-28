@@ -2,14 +2,22 @@
 import { Recipe, PaginatedResponse, RecipeCategories } from "../types";
 
 // Base URL para o BFF (BFF lida com a chave x-api-key e o proxy)
-const API_BASE = '/api';
+// Em produção (Vercel), podemos usar a URL direta do backend configurada via VITE_DISHALCHEMISTS_API_BASE
+const API_BASE = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
+const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || '';
 
 export const apiService = {
   getHeaders(firebaseToken?: string) {
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(firebaseToken ? { 'Authorization': `Bearer ${firebaseToken}` } : {})
     };
+    if (firebaseToken) {
+      headers['Authorization'] = `Bearer ${firebaseToken}`;
+    }
+    if (API_KEY && API_BASE !== '/api') {
+      headers['x-api-key'] = API_KEY;
+    }
+    return headers;
   },
 
   async getRecipes(params?: { 

@@ -67,8 +67,9 @@ export interface Recipe {
   image: string;
   category: string;
   difficulty?: string;
+  prepTime?: string;
   nutrition: RecipeNutrition;
-  ingredients: RecipeIngredient[];
+  ingredients?: RecipeIngredient[];
 }
 
 export interface PaginatedResponse<T> {

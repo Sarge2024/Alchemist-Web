@@ -36,15 +36,23 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  const [apiCategories, setApiCategories] = useState<import("../types").RecipeCategories | null>(null);
+  const DEFAULT_CATEGORIES = {
+    tipo_prato: ["ALTA PROTEÍNA", "BAIXO CARBO", "CAFÉ DA MANHÃ", "CETOGÊNICA", "FITNESS", "FUNCIONAL", "MEDITERRÂNEA"],
+    base_alimento: ["Batata Doce", "Frango", "Fruta"],
+    momento: ["Almoço", "Café da Manhã", "Jantar", "Lanche", "Pós-Treino"]
+  };
+
+  const [apiCategories, setApiCategories] = useState<import("../types").RecipeCategories>(DEFAULT_CATEGORIES);
 
   // Carregar categorias
   useEffect(() => {
     apiService.getCategories().then((res) => {
-      if (res) {
+      if (res && (res.tipo_prato?.length || res.base_alimento?.length || res.momento?.length)) {
         setApiCategories(res);
       }
-    }).catch(console.error);
+    }).catch((err) => {
+      console.warn("Usando categorias padrão pois a API falhou:", err.message);
+    });
   }, []);
 
   // Fetch das receitas
@@ -60,7 +68,7 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
         page: isLoadMore ? page + 1 : 1,
         limit: 12,
         search: debouncedSearch,
-        category: selectedCategory
+        category: selectedCategory === "TODAS" ? "" : selectedCategory
       });
       
       if (isLoadMore) {
@@ -110,18 +118,35 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
       let planUpdated = false;
       const newDays = [...plan.days];
       if (isAdding) {
-        // Encontrar primeiro dia vazio
-        const emptyIndex = newDays.findIndex(d => !d.recipe);
-        if (emptyIndex !== -1) {
-          newDays[emptyIndex] = { ...newDays[emptyIndex], recipe: recipeObj };
-          planUpdated = true;
+        // Encontrar primeiro slot de "Prato Principal" vazio
+        for (let d = 0; d < newDays.length; d++) {
+          let added = false;
+          for (let m = 0; m < newDays[d].meals.length; m++) {
+            for (let c = 0; c < newDays[d].meals[m].courses.length; c++) {
+              const course = newDays[d].meals[m].courses[c];
+              if (course.type === "Prato Principal" && !course.recipe) {
+                newDays[d].meals[m].courses[c] = { ...course, recipe: recipeObj };
+                planUpdated = true;
+                added = true;
+                break;
+              }
+            }
+            if (added) break;
+          }
+          if (added) break;
         }
       } else {
         // Remover receita do plano
-        const recIndex = newDays.findIndex(d => d.recipe?.id === recipeId);
-        if (recIndex !== -1) {
-          newDays[recIndex] = { ...newDays[recIndex], recipe: undefined };
-          planUpdated = true;
+        for (let d = 0; d < newDays.length; d++) {
+          for (let m = 0; m < newDays[d].meals.length; m++) {
+            for (let c = 0; c < newDays[d].meals[m].courses.length; c++) {
+              const course = newDays[d].meals[m].courses[c];
+              if (course.recipe?.id === recipeId) {
+                newDays[d].meals[m].courses[c] = { ...course, recipe: undefined };
+                planUpdated = true;
+              }
+            }
+          }
         }
       }
 

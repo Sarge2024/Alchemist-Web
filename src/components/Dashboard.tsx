@@ -46,16 +46,25 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
           const currentDayIndex = Math.max(0, new Date().getDay() - 1); // 1 = Monday
           const todayPlan = plan.days[currentDayIndex];
           
-          if (todayPlan && todayPlan.recipe) {
-            setTodayMeals([{
-              id: 'planned-1',
-              name: todayPlan.recipe.title,
-              description: todayPlan.recipe.description,
-              image: todayPlan.recipe.image,
-              calories: todayPlan.recipe.nutrition?.calories || 0,
-              time: "Almoço",
-              completed: false
-            }]);
+          if (todayPlan) {
+            // Encontra todas as receitas planejadas para o dia atual
+            const plannedMeals: any[] = [];
+            todayPlan.meals.forEach((meal, mIdx) => {
+              meal.courses.forEach((course, cIdx) => {
+                if (course.recipe) {
+                  plannedMeals.push({
+                    id: `planned-${mIdx}-${cIdx}`,
+                    name: course.recipe.title,
+                    description: course.recipe.description,
+                    image: course.recipe.image,
+                    calories: course.recipe.nutrition?.calories || 0,
+                    time: meal.name,
+                    completed: false
+                  });
+                }
+              });
+            });
+            setTodayMeals(plannedMeals);
           }
         }
       } catch (e) {
