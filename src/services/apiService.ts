@@ -5,7 +5,20 @@ import { Recipe, PaginatedResponse, RecipeCategories } from "../types";
 // O BFF injeta o x-api-key server-side — a API Key NUNCA é exposta no browser
 // Base URL para o BFF (BFF lida com a chave x-api-key e o proxy)
 // Em produção (Vercel), podemos usar a URL direta do backend configurada via VITE_DISHALCHEMISTS_API_BASE
-const API_BASE = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
+const getApiBase = () => {
+  const base = import.meta.env.VITE_DISHALCHEMISTS_API_BASE || '/api';
+  if (base !== '/api') {
+    if (base.endsWith('/api')) {
+      return `${base}/v1/public`;
+    }
+    if (base.endsWith('/api/')) {
+      return `${base}v1/public`;
+    }
+  }
+  return base;
+};
+
+const API_BASE = getApiBase();
 const API_KEY = import.meta.env.VITE_DISHALCHEMISTS_API_KEY || '';
 
 export const apiService = {
