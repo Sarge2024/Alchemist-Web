@@ -77,13 +77,13 @@ export const plannerService = {
           
           if (!currentCourse.recipe) {
             currentCourse.isLeftover = false;
-            currentCourse.sourceDayName = undefined;
+            delete currentCourse.sourceDayName;
             continue;
           }
           
           if (d === 0) {
             currentCourse.isLeftover = false;
-            currentCourse.sourceDayName = undefined;
+            delete currentCourse.sourceDayName;
           } else {
             const prevCourse = newPlan.days[d - 1].meals[m].courses[c];
             const prevRecipe = prevCourse.recipe;

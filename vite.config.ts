@@ -13,7 +13,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png'],
         devOptions: {
-          enabled: true,
+          enabled: false,
           type: 'module'
         },
         manifest: {

@@ -142,7 +142,9 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
             for (let c = 0; c < newDays[d].meals[m].courses.length; c++) {
               const course = newDays[d].meals[m].courses[c];
               if (course.recipe?.id === recipeId) {
-                newDays[d].meals[m].courses[c] = { ...course, recipe: undefined };
+                const newCourse = { ...course };
+                delete newCourse.recipe;
+                newDays[d].meals[m].courses[c] = newCourse;
                 planUpdated = true;
               }
             }
