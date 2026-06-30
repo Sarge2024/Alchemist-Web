@@ -108,22 +108,22 @@ export default function RecipeDetail({ recipeId, onBack }: RecipeDetailProps) {
             </p>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-outline-variant/30 rounded-xl p-4 text-center shadow-sm">
-              <span className="block font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-widest mb-1">Calorias</span>
-              <span className="font-serif text-xl font-bold text-primary">{recipe.nutrition?.calories || 0}</span>
+          <div className="flex bg-white border border-outline-variant/30 rounded-xl overflow-hidden shadow-sm divide-x divide-outline-variant/30">
+            <div className="flex-1 p-2 md:p-3 text-center">
+              <span className="block font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-widest mb-0.5">Calorias</span>
+              <span className="font-serif text-sm md:text-base font-bold text-primary">{recipe.nutrition?.calories || 0}</span>
             </div>
-            <div className="bg-white border border-outline-variant/30 rounded-xl p-4 text-center shadow-sm">
-              <span className="block font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-widest mb-1">Proteína</span>
-              <span className="font-serif text-xl font-bold text-primary">{recipe.nutrition?.protein || 0}g</span>
+            <div className="flex-1 p-2 md:p-3 text-center">
+              <span className="block font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-widest mb-0.5">Proteína</span>
+              <span className="font-serif text-sm md:text-base font-bold text-primary">{recipe.nutrition?.protein || 0}g</span>
             </div>
-            <div className="bg-white border border-outline-variant/30 rounded-xl p-4 text-center shadow-sm">
-              <span className="block font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-widest mb-1">Carboidratos</span>
-              <span className="font-serif text-xl font-bold text-primary">{recipe.nutrition?.carbs || 0}g</span>
+            <div className="flex-1 p-2 md:p-3 text-center">
+              <span className="block font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-widest mb-0.5">Carbos</span>
+              <span className="font-serif text-sm md:text-base font-bold text-primary">{recipe.nutrition?.carbs || 0}g</span>
             </div>
-            <div className="bg-white border border-outline-variant/30 rounded-xl p-4 text-center shadow-sm">
-              <span className="block font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-widest mb-1">Gorduras</span>
-              <span className="font-serif text-xl font-bold text-gold-leaf">{recipe.nutrition?.fat || 0}g</span>
+            <div className="flex-1 p-2 md:p-3 text-center">
+              <span className="block font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-widest mb-0.5">Gorduras</span>
+              <span className="font-serif text-sm md:text-base font-bold text-gold-leaf">{recipe.nutrition?.fat || 0}g</span>
             </div>
           </div>
         </div>

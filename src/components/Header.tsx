@@ -26,7 +26,7 @@ export default function Header({
       case ActiveView.DASHBOARD:
         return "Painel de Controle";
       case ActiveView.PLANNER:
-        return "Protocolo Semanal";
+        return "Cardápio Semanal";
       case ActiveView.RECIPES:
         return "Gastronomia Molecular";
       case ActiveView.SHOPPING:

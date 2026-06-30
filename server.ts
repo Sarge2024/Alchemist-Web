@@ -143,6 +143,61 @@ app.post('/api/nutrition/calculate', async (req, res) => {
     }
 });
 
+// ==========================================
+// Produtos Industrializados — Proxy
+// ==========================================
+const PRODUCTS_API_BASE = process.env.DISHALCHEMISTS_API_BASE?.replace('/api/v1/public', '') || 'http://localhost:4005';
+
+// GET /api/products/barcode/:ean — Busca produto pelo código de barras
+app.get('/api/products/barcode/:ean', async (req, res) => {
+    try {
+        const response = await fetch(`${PRODUCTS_API_BASE}/api/v1/products/barcode/${req.params.ean}`, {
+            headers: backendHeaders()
+        });
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (err: any) {
+        console.error("Erro ao buscar produto por barcode:", err.message);
+        res.status(500).json({ error: "Falha ao buscar produto" });
+    }
+});
+
+// POST /api/products — Cadastro manual de produto
+app.post('/api/products', async (req, res) => {
+    try {
+        const response = await fetch(`${PRODUCTS_API_BASE}/api/v1/products`, {
+            method: 'POST',
+            headers: backendHeaders(),
+            body: JSON.stringify(req.body)
+        });
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (err: any) {
+        console.error("Erro ao cadastrar produto:", err.message);
+        res.status(500).json({ error: "Falha ao cadastrar produto" });
+    }
+});
+
+// GET /api/products — Lista produtos com busca
+app.get('/api/products', async (req, res) => {
+    try {
+        const { search, page, limit } = req.query;
+        const params = new URLSearchParams();
+        if (search) params.set('search', search as string);
+        if (page) params.set('page', page as string);
+        if (limit) params.set('limit', limit as string);
+
+        const response = await fetch(`${PRODUCTS_API_BASE}/api/v1/products${params.toString() ? '?' + params.toString() : ''}`, {
+            headers: backendHeaders()
+        });
+        const data = await response.json();
+        res.json(data);
+    } catch (err: any) {
+        console.error("Erro ao listar produtos:", err.message);
+        res.status(500).json({ error: "Falha ao listar produtos" });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`BFF rodando em http://localhost:${PORT}`);
     console.log(`Proxeando para backend: ${DISH_API_BASE}`);

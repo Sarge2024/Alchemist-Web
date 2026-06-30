@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Minus, Sparkles, Check, Zap, Flame, Scale, Clock } from "lucide-react";
-import { Recipe, WeeklyPlan, Profile } from "../types";
+import { Plus, Minus, Sparkles, Check, Zap, Flame, Scale, Clock, Coffee, X, Search, Camera } from "lucide-react";
+import { Recipe, WeeklyPlan, Profile, IndustrialProduct } from "../types";
 import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
 import { userService } from "../services/userService";
+import { productService } from "../services/productService";
+import ProductScanner from "./ProductScanner";
 
 interface WeeklyPlannerProps {
   familyId: string | null;
@@ -21,6 +23,17 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   
   // Controle de abas para os dias da semana
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
+  
+  // Estados para o Modal de Seleção de Receitas
+  const [recipeModalOpen, setRecipeModalOpen] = useState(false);
+  const [targetSlot, setTargetSlot] = useState<{dayIndex: number, mealIndex: number, courseIndex: number} | null>(null);
+
+  // Estados para produtos industrializados
+  const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
+  const [productSearch, setProductSearch] = useState('');
+  const [availableProducts, setAvailableProducts] = useState<IndustrialProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productScannerOpen, setProductScannerOpen] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -56,6 +69,47 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     loadData();
   }, [familyId, activeProfileId]);
 
+  useEffect(() => {
+    if (!recipeModalOpen || modalTab !== 'products') return;
+
+    let active = true;
+    async function searchProducts() {
+      setLoadingProducts(true);
+      try {
+        const res = await productService.searchProducts(productSearch, 1, 30);
+        if (active && res.success) {
+          setAvailableProducts(res.data);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar produtos:", err);
+      } finally {
+        if (active) setLoadingProducts(false);
+      }
+    }
+
+    const timer = setTimeout(searchProducts, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [recipeModalOpen, modalTab, productSearch]);
+
+  const convertProductToRecipe = (product: IndustrialProduct): Recipe => {
+    return {
+      id: `prod-${product.id}`,
+      title: product.name,
+      description: product.brand ? `Marca: ${product.brand}` : "Produto Industrializado",
+      image: product.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80",
+      category: "PRODUTO",
+      nutrition: product.nutrition,
+      defaultDurabilityDays: 30,
+    };
+  };
+
+  const handleSelectProduct = (product: IndustrialProduct) => {
+    handleSelectRecipe(convertProductToRecipe(product));
+  };
+
   const incrementScale = () => {
     if (!weeklyPlan) return;
     const newPlan = { ...weeklyPlan, portionScale: Math.min(weeklyPlan.portionScale + 1, 8) };
@@ -89,21 +143,31 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     }, 1500);
   };
 
-  const addFormula = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
-    if (!weeklyPlan || availableRecipes.length === 0) return;
-    const randomRecipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
+  const addFormula = (dayIndex: number, mealIndex: number, courseIndex: number) => {
+    setTargetSlot({ dayIndex, mealIndex, courseIndex });
+    setModalTab('recipes');
+    setProductSearch('');
+    setRecipeModalOpen(true);
+  };
+  
+  const handleSelectRecipe = async (recipe: Recipe) => {
+    if (!weeklyPlan || !targetSlot) return;
     
+    const { dayIndex, mealIndex, courseIndex } = targetSlot;
     const newDays = [...weeklyPlan.days];
     const newMeals = [...newDays[dayIndex].meals];
     const newCourses = [...newMeals[mealIndex].courses];
     
-    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: randomRecipe };
+    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe };
     newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
     newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
     
     const newPlan = { ...weeklyPlan, days: newDays };
     setWeeklyPlan(newPlan);
     await savePlanDebounced(newPlan);
+    
+    setRecipeModalOpen(false);
+    setTargetSlot(null);
   };
   
   const removeFormula = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
@@ -139,6 +203,35 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     const newPlan = { ...weeklyPlan, days: newDays };
     setWeeklyPlan(newPlan);
     await savePlanDebounced(newPlan);
+  };
+
+  const extendToTomorrow = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
+    if (!weeklyPlan || dayIndex >= weeklyPlan.days.length - 1) return;
+    
+    const currentRecipe = weeklyPlan.days[dayIndex].meals[mealIndex].courses[courseIndex].recipe;
+    if (!currentRecipe) return;
+
+    const newDays = [...weeklyPlan.days];
+    const nextMeals = [...newDays[dayIndex + 1].meals];
+    
+    // Tentamos encontrar o mesmo meal e course no dia seguinte
+    if (nextMeals[mealIndex] && nextMeals[mealIndex].courses[courseIndex]) {
+      const nextCourses = [...nextMeals[mealIndex].courses];
+      nextCourses[courseIndex] = {
+        ...nextCourses[courseIndex],
+        recipe: currentRecipe,
+        prepMode: "batch" // Assume-se que vai sobrar da receita feita hoje
+      };
+      nextMeals[mealIndex] = { ...nextMeals[mealIndex], courses: nextCourses };
+      newDays[dayIndex + 1] = { ...newDays[dayIndex + 1], meals: nextMeals };
+      
+      const newPlan = { ...weeklyPlan, days: newDays };
+      setWeeklyPlan(newPlan);
+      await savePlanDebounced(newPlan);
+      
+      setToastMessage("Receita prorrogada para o mesmo horário de amanhã!");
+      setTimeout(() => setToastMessage(null), 3000);
+    }
   };
 
   const toggleCloseDay = async (dayIndex: number) => {
@@ -217,7 +310,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       {/* Header controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-outline-variant/30 pb-6">
         <div>
-          <h2 className="font-serif text-3xl font-bold text-primary tracking-tight">Protocolo Semanal</h2>
+          <h2 className="font-sans text-3xl font-bold text-primary tracking-tight">Cardápio Semanal</h2>
           <p className="font-sans text-sm text-scientific-gray mt-1">
             Projete sua sequência de ingestão nutricional. Selecione pratos para cada refeição do dia.
           </p>
@@ -303,6 +396,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
             <h3 className="font-serif text-xl font-bold text-primary mb-5 flex items-center gap-2 border-b border-outline-variant/20 pb-3">
               {meal.name === "Café da Manhã" && <Clock className="w-5 h-5 text-gold-leaf" />}
               {meal.name === "Almoço" && <Flame className="w-5 h-5 text-secondary" />}
+              {meal.name === "Café da Tarde" && <Coffee className="w-5 h-5 text-amber-600" />}
               {meal.name === "Jantar" && <Sparkles className="w-5 h-5 text-primary" />}
               {meal.name === "Ceia" && <Scale className="w-5 h-5 text-scientific-gray" />}
               {meal.name}
@@ -372,13 +466,24 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                           <span className="font-serif text-xs font-bold text-scientific-gray">
                             {Math.round((course.recipe.nutrition?.calories || 0) * (weeklyPlan.portionScale / 2))} kcal
                           </span>
-                          {!isDayClosed && !course.isLeftover && (
-                            <button
-                              onClick={() => removeFormula(selectedDayIndex, mealIndex, courseIndex)}
-                              className="text-[9px] uppercase font-bold text-error hover:underline"
-                            >
-                              Remover
-                            </button>
+                          {!isDayClosed && (
+                            <div className="flex gap-3">
+                              {selectedDayIndex < weeklyPlan.days.length - 1 && (
+                                <button
+                                  onClick={() => extendToTomorrow(selectedDayIndex, mealIndex, courseIndex)}
+                                  className="text-[9px] uppercase font-bold text-primary hover:underline"
+                                  title="Prorrogar o uso da receita para o próximo dia"
+                                >
+                                  Repetir Amanhã
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removeFormula(selectedDayIndex, mealIndex, courseIndex)}
+                                className="text-[9px] uppercase font-bold text-error hover:underline"
+                              >
+                                Remover
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -565,6 +670,194 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
           </div>
         </div>
       </section>
+
+      {/* Modal de Seleção de Receita */}
+      <AnimatePresence>
+        {recipeModalOpen && targetSlot && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="p-5 border-b border-outline-variant/30 flex justify-between items-center bg-lab-white">
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-primary">
+                    {modalTab === 'recipes' ? "Selecione uma Receita" : "Selecione um Produto"}
+                  </h3>
+                  <p className="font-sans text-xs text-scientific-gray mt-1">
+                    Para: {weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name} - {weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setRecipeModalOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-outline-variant/30 text-scientific-gray transition-colors focus:outline-none"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Seletor de Abas */}
+              <div className="flex border-b border-outline-variant/20 bg-lab-white px-5">
+                <button
+                  onClick={() => setModalTab('recipes')}
+                  className={`py-3 px-4 text-xs font-bold font-sans uppercase tracking-wider border-b-2 transition-all focus:outline-none ${modalTab === 'recipes' ? 'border-primary text-primary' : 'border-transparent text-scientific-gray hover:text-primary'}`}
+                >
+                  🍳 Receitas
+                </button>
+                <button
+                  onClick={() => setModalTab('products')}
+                  className={`py-3 px-4 text-xs font-bold font-sans uppercase tracking-wider border-b-2 transition-all focus:outline-none ${modalTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-scientific-gray hover:text-primary'}`}
+                >
+                  📦 Produtos Industrializados
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {modalTab === 'recipes' ? (
+                  availableRecipes.length === 0 ? (
+                    <p className="text-center font-sans text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {availableRecipes
+                        .filter(recipe => {
+                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                          if (!activeProfile?.approvedRecipes || activeProfile.approvedRecipes.length === 0) {
+                            return true;
+                          }
+                          return activeProfile.approvedRecipes.some(r => r.recipeId === recipe.id && r.period === currentPeriod);
+                        })
+                        .map((recipe) => (
+                          <div
+                            key={recipe.id}
+                            className="border border-outline-variant/30 rounded-xl p-3 flex gap-3 items-center hover:border-primary hover:shadow-md cursor-pointer transition-all bg-white"
+                            onClick={() => handleSelectRecipe(recipe)}
+                          >
+                            <img
+                              src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"}
+                              alt={recipe.title}
+                              className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-sans text-xs font-bold text-primary leading-tight line-clamp-2">
+                                {recipe.title}
+                              </h4>
+                              <div className="flex gap-2 mt-1.5 items-center">
+                                <span className="font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-wider truncate">
+                                  {Array.isArray(recipe.category) ? recipe.category[0] : (recipe.category || "RECEITA")}
+                                </span>
+                                <span className="text-outline-variant/50 text-[10px]">•</span>
+                                <span className="font-serif text-[10px] font-bold text-primary">
+                                  {recipe.nutrition?.calories || 0} kcal
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )
+                ) : (
+                  // ABA DE PRODUTOS
+                  <div className="space-y-4">
+                    {/* Barra de busca e escaneamento */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-scientific-gray absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="Buscar produto cadastrado..."
+                          className="w-full pl-10 pr-4 py-2 bg-lab-white border border-outline-variant/40 rounded-xl text-xs outline-none focus:border-primary focus:bg-white transition-all font-sans"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setProductScannerOpen(true)}
+                        className="px-4 py-2 bg-primary text-white rounded-xl font-sans text-xs font-bold hover:bg-primary/95 transition-all flex items-center gap-1.5 focus:outline-none"
+                      >
+                        <Camera className="w-4 h-4" />
+                        CADASTRAR
+                      </button>
+                    </div>
+
+                    {loadingProducts ? (
+                      <div className="py-12 text-center">
+                        <svg className="animate-spin h-6 w-6 text-primary mx-auto" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <p className="font-sans text-xs text-scientific-gray mt-2">Buscando dispensa...</p>
+                      </div>
+                    ) : availableProducts.length === 0 ? (
+                      <div className="py-12 text-center border border-dashed border-outline-variant/40 rounded-xl bg-lab-white/50">
+                        <p className="font-sans text-xs text-scientific-gray">
+                          Nenhum produto industrializado encontrado. <br />
+                          Clique em <strong>CADASTRAR</strong> para ler um código de barras.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {availableProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            className="border border-outline-variant/30 rounded-xl p-3 flex gap-3 items-center hover:border-primary hover:shadow-md cursor-pointer transition-all bg-white"
+                            onClick={() => handleSelectProduct(product)}
+                          >
+                            {product.image ? (
+                              <img
+                                src={product.image}
+                                alt={product.name}
+                                className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-16 h-16 rounded-lg bg-outline-variant/20 flex items-center justify-center flex-shrink-0 text-scientific-gray text-xl">
+                                📦
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-sans text-xs font-bold text-primary leading-tight line-clamp-2">
+                                {product.name}
+                              </h4>
+                              {product.brand && (
+                                <span className="block font-sans text-[9px] text-scientific-gray uppercase tracking-wider truncate mt-0.5">
+                                  {product.brand}
+                                </span>
+                              )}
+                              <div className="flex gap-2 mt-1.5 items-center">
+                                <span className="font-sans text-[9px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                  {product.source === 'OFF' ? 'OFF' : 'Manual'}
+                                </span>
+                                <span className="text-outline-variant/50 text-[10px]">•</span>
+                                <span className="font-serif text-[10px] font-bold text-primary">
+                                  {product.nutrition?.calories || 0} kcal
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sub-modal do Scanner */}
+      <AnimatePresence>
+        {productScannerOpen && (
+          <ProductScanner
+            onProductRegistered={(prod) => {
+              setProductScannerOpen(false);
+              handleSelectProduct(prod);
+            }}
+            onClose={() => setProductScannerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

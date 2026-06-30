@@ -44,6 +44,7 @@ export interface Profile {
   fatPercentage: number; // e.g. 25
   allergies: string[]; // e.g. ["Amendoim"]
   medications: string; // text description
+  approvedRecipes?: { recipeId: string, period: string }[]; // Preferências de receitas aprovadas por período
 }
 
 export interface RecipeNutrition {
@@ -90,7 +91,7 @@ export interface RecipeCategories {
 }
 
 export interface CourseSlot {
-  type: "Entrada" | "Prato Principal" | "Sobremesa" | "Bebida";
+  type: "Entrada" | "Prato Principal" | "Sobremesa" | "Bebida" | "Lanche";
   recipe?: Recipe;
   isLeftover?: boolean;
   sourceDayName?: string;
@@ -99,7 +100,7 @@ export interface CourseSlot {
 }
 
 export interface MealPlan {
-  name: "Café da Manhã" | "Almoço" | "Jantar" | "Ceia";
+  name: "Café da Manhã" | "Almoço" | "Café da Tarde" | "Jantar" | "Ceia";
   courses: CourseSlot[];
 }
 
@@ -165,4 +166,17 @@ export interface ConsumptionLogDoc {
   totalProtein: number;
   totalCarbs: number;
   totalFat: number;
+}
+
+export interface IndustrialProduct {
+  id: string;
+  name: string;
+  brand?: string;
+  barcode?: string;
+  image?: string;
+  portionSize: number;       // ex: 200
+  portionUnit: string;       // ex: "ml"
+  nutrition: RecipeNutrition; // reutiliza o tipo existente
+  allergens?: string[];
+  source: 'OFF' | 'MANUAL';
 }

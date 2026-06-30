@@ -31,10 +31,11 @@ export const plannerService = {
           plan.days = plan.days.map(d => ({
             ...d,
             meals: [
-              { name: "Café da Manhã", courses: [{ type: "Entrada" }, { type: "Prato Principal", recipe: (d as any).recipe }, { type: "Sobremesa" }, { type: "Bebida" }] },
+              { name: "Café da Manhã", courses: [{ type: "Lanche", recipe: (d as any).recipe }, { type: "Bebida" }] },
               { name: "Almoço", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] },
+              { name: "Café da Tarde", courses: [{ type: "Lanche" }, { type: "Bebida" }] },
               { name: "Jantar", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] },
-              { name: "Ceia", courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }] }
+              { name: "Ceia", courses: [{ type: "Lanche" }, { type: "Bebida" }] }
             ]
           }));
         }
@@ -242,11 +243,15 @@ export const plannerService = {
         meals: [
           {
             name: "Café da Manhã",
-            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+            courses: [{ type: "Lanche" }, { type: "Bebida" }]
           },
           {
             name: "Almoço",
             courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+          },
+          {
+            name: "Café da Tarde",
+            courses: [{ type: "Lanche" }, { type: "Bebida" }]
           },
           {
             name: "Jantar",
@@ -254,7 +259,7 @@ export const plannerService = {
           },
           {
             name: "Ceia",
-            courses: [{ type: "Entrada" }, { type: "Prato Principal" }, { type: "Sobremesa" }, { type: "Bebida" }]
+            courses: [{ type: "Lanche" }, { type: "Bebida" }]
           }
         ] as any[]
       };

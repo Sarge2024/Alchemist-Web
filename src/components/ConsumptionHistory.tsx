@@ -460,8 +460,10 @@ export default function ConsumptionHistory({ familyId, activeProfileId }: Consum
                 >
                   <option value="Café da Manhã">Café da Manhã</option>
                   <option value="Almoço">Almoço</option>
+                  <option value="Café da Tarde">Café da Tarde</option>
                   <option value="Lanche">Lanche</option>
                   <option value="Jantar">Jantar</option>
+                  <option value="Ceia">Ceia</option>
                 </select>
               </div>
             </div>

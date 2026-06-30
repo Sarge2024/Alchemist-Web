@@ -7,7 +7,8 @@ import RecipeDetail from "./RecipeDetail";
 
 import { plannerService } from "../services/plannerService";
 import { shoppingService } from "../services/shoppingService";
-import { ShoppingItem } from "../types";
+import { userService } from "../services/userService";
+import { ShoppingItem, Profile } from "../types";
 
 interface RecipeListProps {
   familyId?: string | null;
@@ -18,8 +19,15 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
   const [searchQuery, setSearchInput] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("TODAS");
-  const [menuRecipes, setMenuRecipes] = useState<Set<string>>(new Set());
+  
+  // Lista de receitas aprovadas pelo usuário com seus respectivos períodos
+  const [approvedRecipes, setApprovedRecipes] = useState<{recipeId: string, period: string}[]>([]);
+  const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
+  
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  
+  // Estado para armazenar a seleção temporária na UI antes de salvar
+  const [recipePeriodSelections, setRecipePeriodSelections] = useState<Record<string, string>>({});
   
   // States para a API
   const [apiRecipes, setApiRecipes] = useState<Recipe[]>([]);
@@ -39,7 +47,7 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
   const DEFAULT_CATEGORIES = {
     tipo_prato: ["ALTA PROTEÍNA", "BAIXO CARBO", "CAFÉ DA MANHÃ", "CETOGÊNICA", "FITNESS", "FUNCIONAL", "MEDITERRÂNEA"],
     base_alimento: ["Batata Doce", "Frango", "Fruta"],
-    momento: ["Almoço", "Café da Manhã", "Jantar", "Lanche", "Pós-Treino"]
+    momento: ["Almoço", "Café da Manhã", "Café da Tarde", "Ceia", "Jantar", "Lanche", "Pós-Treino"]
   };
 
   const [apiCategories, setApiCategories] = useState<import("../types").RecipeCategories>(DEFAULT_CATEGORIES);
@@ -92,78 +100,58 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
     fetchRecipes(false);
   }, [debouncedSearch, selectedCategory]);
 
-  const handleToggleMenu = async (recipeId: string) => {
-    // Optimistic UI update
-    const isAdding = !menuRecipes.has(recipeId);
-    setMenuRecipes((prev) => {
-      const newSet = new Set(prev);
-      if (isAdding) newSet.add(recipeId);
-      else newSet.delete(recipeId);
-      return newSet;
-    });
-
-    if (!familyId || !activeProfileId) return;
-
-    try {
-      const weekId = plannerService.getCurrentWeekId();
-      let plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
-      if (!plan) {
-        plan = plannerService.generateEmptyPlan(familyId, activeProfileId, weekId);
-      }
-
-      const recipeObj = apiRecipes.find(r => r.id === recipeId);
-      if (!recipeObj) return;
-
-      // Update WeeklyPlan
-      let planUpdated = false;
-      const newDays = [...plan.days];
-      if (isAdding) {
-        // Encontrar primeiro slot de "Prato Principal" vazio
-        for (let d = 0; d < newDays.length; d++) {
-          let added = false;
-          for (let m = 0; m < newDays[d].meals.length; m++) {
-            for (let c = 0; c < newDays[d].meals[m].courses.length; c++) {
-              const course = newDays[d].meals[m].courses[c];
-              if (course.type === "Prato Principal" && !course.recipe) {
-                newDays[d].meals[m].courses[c] = { ...course, recipe: recipeObj };
-                planUpdated = true;
-                added = true;
-                break;
-              }
-            }
-            if (added) break;
+  // Carrega o perfil do usuário para buscar receitas aprovadas
+  useEffect(() => {
+    async function loadProfile() {
+      if (familyId && activeProfileId) {
+        const members = await userService.getFamilyMembers(familyId);
+        const currentProf = members.find(p => p.id === activeProfileId);
+        if (currentProf) {
+          setActiveProfile(currentProf);
+          if (currentProf.approvedRecipes) {
+            setApprovedRecipes(currentProf.approvedRecipes);
           }
-          if (added) break;
         }
+      }
+    }
+    loadProfile();
+  }, [familyId, activeProfileId]);
+
+  const handleApproveRecipe = async (recipeId: string) => {
+    if (!familyId || !activeProfileId || !activeProfile) return;
+    
+    const validPeriods = ["Café da Manhã", "Almoço", "Café da Tarde", "Jantar", "Ceia"];
+    const defaultPeriod = validPeriods.includes(selectedCategory) ? selectedCategory : "Almoço";
+    const period = recipePeriodSelections[recipeId] || defaultPeriod;
+    
+    // Atualiza o state local otimista
+    let newApproved = [...approvedRecipes];
+    const existingIndex = newApproved.findIndex(r => r.recipeId === recipeId);
+    
+    if (existingIndex >= 0) {
+      if (newApproved[existingIndex].period === period) {
+        // Se já está aprovada para esse período, então "desaprova" (toggle off)
+        newApproved.splice(existingIndex, 1);
       } else {
-        // Remover receita do plano
-        for (let d = 0; d < newDays.length; d++) {
-          for (let m = 0; m < newDays[d].meals.length; m++) {
-            for (let c = 0; c < newDays[d].meals[m].courses.length; c++) {
-              const course = newDays[d].meals[m].courses[c];
-              if (course.recipe?.id === recipeId) {
-                const newCourse = { ...course };
-                delete newCourse.recipe;
-                newDays[d].meals[m].courses[c] = newCourse;
-                planUpdated = true;
-              }
-            }
-          }
-        }
+        // Se mudou o período, atualiza
+        newApproved[existingIndex].period = period;
       }
-
-      if (planUpdated) {
-        await plannerService.saveWeeklyPlan({ ...plan, days: newDays });
-      }
-    } catch (e) {
-      console.error("Erro ao integrar com Cardápio/Compras:", e);
-      // Revert in case of failure
-      setMenuRecipes((prev) => {
-        const newSet = new Set(prev);
-        if (isAdding) newSet.delete(recipeId);
-        else newSet.add(recipeId);
-        return newSet;
+    } else {
+      // Adiciona nova
+      newApproved.push({ recipeId, period });
+    }
+    
+    setApprovedRecipes(newApproved);
+    
+    try {
+      // Salva no Firestore
+      await userService.updateMemberProfile(familyId, activeProfileId, {
+        approvedRecipes: newApproved
       });
+    } catch (e) {
+      console.error("Erro ao salvar preferência de receita:", e);
+      // Reverte em caso de falha
+      setApprovedRecipes(approvedRecipes);
     }
   };
 
@@ -190,7 +178,7 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
       {/* Hero Search Section */}
       <section className="space-y-4 max-w-2xl">
         <div>
-          <h2 className="font-serif text-3xl font-bold text-primary tracking-tight">Gastronomia Molecular</h2>
+          <h2 className="font-sans text-3xl font-bold text-primary tracking-tight">Seletor Gastronômico</h2>
           <p className="font-sans text-sm text-scientific-gray mt-1">
             Receitas de precisão projetadas para suas necessidades biológicas.
           </p>
@@ -276,11 +264,11 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
               className="bg-lab-white border border-outline-variant/30 rounded-xl p-4 flex flex-row items-center justify-between hover:shadow-md transition-all duration-300 cursor-pointer group"
             >
               <div className="flex flex-col">
-                <h3 className="font-serif text-base font-bold text-primary group-hover:text-gold-leaf transition-colors">
+                <h3 className="font-sans text-[15px] font-semibold text-primary group-hover:text-gold-leaf transition-colors leading-snug tracking-tight">
                   {recipe.title}
                 </h3>
                 <div className="flex gap-2 items-center mt-1">
-                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wide">
+                  <span className="font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-wider">
                     {Array.isArray(recipe.category) ? recipe.category.join(", ") : recipe.category || "RECEITA"}
                   </span>
                   <span className="text-outline-variant/50">•</span>
@@ -290,25 +278,28 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
                 </div>
               </div>
 
-              {/* Checkbox Action */}
-              <div className="flex items-center gap-3 pl-4">
-                <label 
-                  className="flex items-center gap-2 cursor-pointer"
-                  onClick={(e) => e.stopPropagation()}
+              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 pl-4" onClick={(e) => e.stopPropagation()}>
+                <select
+                  className="font-sans text-xs bg-transparent border border-outline-variant/30 text-scientific-gray rounded-md px-2 py-1 focus:outline-none focus:border-primary/50"
+                  value={recipePeriodSelections[recipe.id] || approvedRecipes.find(r => r.recipeId === recipe.id)?.period || (["Café da Manhã", "Almoço", "Café da Tarde", "Jantar", "Ceia"].includes(selectedCategory) ? selectedCategory : "Almoço")}
+                  onChange={(e) => setRecipePeriodSelections(prev => ({ ...prev, [recipe.id]: e.target.value }))}
                 >
-                  <span className={`font-sans text-xs font-bold transition-colors select-none hidden sm:block ${menuRecipes.has(recipe.id) ? "text-primary" : "text-scientific-gray"}`}>
-                    {menuRecipes.has(recipe.id) ? "NO CARDÁPIO" : "ADICIONAR"}
-                  </span>
-                  <div className="relative flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={menuRecipes.has(recipe.id)}
-                      onChange={() => handleToggleMenu(recipe.id)}
-                      className="peer appearance-none w-5 h-5 border-2 border-outline-variant rounded-md checked:bg-primary checked:border-primary transition-colors cursor-pointer"
-                    />
-                    <Check className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
-                  </div>
-                </label>
+                  <option value="Café da Manhã">Café da Manhã</option>
+                  <option value="Almoço">Almoço</option>
+                  <option value="Café da Tarde">Café da Tarde</option>
+                  <option value="Jantar">Jantar</option>
+                  <option value="Ceia">Ceia</option>
+                </select>
+                <button
+                  onClick={() => handleApproveRecipe(recipe.id)}
+                  className={`font-sans text-xs font-bold px-3 py-1.5 rounded-lg border transition-all select-none ${
+                    approvedRecipes.some(r => r.recipeId === recipe.id)
+                      ? "bg-primary text-white border-primary"
+                      : "bg-transparent text-primary border-primary/40 hover:bg-sage-wash hover:border-primary"
+                  }`}
+                >
+                  {approvedRecipes.some(r => r.recipeId === recipe.id) ? "INSERIDO" : "INSERIR"}
+                </button>
               </div>
             </div>
           ))
