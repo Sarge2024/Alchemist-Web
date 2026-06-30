@@ -3,7 +3,13 @@ import { IndustrialProduct, PaginatedResponse } from "../types";
 const getApiBase = () => {
   const envBase = import.meta.env.VITE_DISHALCHEMISTS_API_BASE;
   if (envBase) {
-    return envBase.replace('/v1/public', '/v1/products');
+    let resolvedBase = envBase;
+    if (envBase.endsWith('/api')) {
+      resolvedBase = `${envBase}/v1/public`;
+    } else if (envBase.endsWith('/api/')) {
+      resolvedBase = `${envBase}v1/public`;
+    }
+    return resolvedBase.replace('/v1/public', '/v1/products');
   }
   
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
