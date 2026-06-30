@@ -103,6 +103,16 @@ export function Login() {
             </>
           )}
         </motion.button>
+ 
+        {/* Revision Number */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="mt-3 text-[10px] font-sans font-semibold tracking-wider text-scientific-gray/60 uppercase"
+        >
+          Revisão: v4.3.0
+        </motion.div>
 
         {/* Footer */}
         <motion.div 
