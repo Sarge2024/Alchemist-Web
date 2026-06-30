@@ -1,13 +1,47 @@
 import { IndustrialProduct, PaginatedResponse } from "../types";
 
-const API_BASE = "/api/products";
+const getApiBase = () => {
+  const envBase = import.meta.env.VITE_DISHALCHEMISTS_API_BASE;
+  if (envBase) {
+    return envBase.replace('/v1/public', '/v1/products');
+  }
+  
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://dishalchemists.com/api/v1/products';
+  }
+  
+  return '/api/products';
+};
+
+const getApiKey = () => {
+  const envKey = import.meta.env.VITE_DISHALCHEMISTS_API_KEY;
+  if (!envKey || envKey.trim() === '' || envKey.trim() === 'YOUR_API_KEY_HERE') {
+    return 'alchemist-app-secret-2024';
+  }
+  return envKey;
+};
+
+const API_BASE = getApiBase();
+const API_KEY = getApiKey();
 
 export const productService = {
+  getHeaders() {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (API_KEY && API_BASE !== '/api/products') {
+      headers['x-api-key'] = API_KEY;
+    }
+    return headers;
+  },
+
   /**
    * Busca produto pelo código de barras (EAN-13 / UPC)
    */
   async getByBarcode(ean: string): Promise<{ success: boolean; product?: IndustrialProduct; error?: string }> {
-    const response = await fetch(`${API_BASE}/barcode/${ean}`);
+    const response = await fetch(`${API_BASE}/barcode/${ean}`, {
+      headers: this.getHeaders()
+    });
     return response.json();
   },
 
@@ -29,7 +63,7 @@ export const productService = {
   }): Promise<{ success: boolean; product?: IndustrialProduct; error?: string }> {
     const response = await fetch(API_BASE, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.getHeaders(),
       body: JSON.stringify(data),
     });
     return response.json();
@@ -48,7 +82,9 @@ export const productService = {
     params.set("page", String(page));
     params.set("limit", String(limit));
 
-    const response = await fetch(`${API_BASE}?${params.toString()}`);
+    const response = await fetch(`${API_BASE}?${params.toString()}`, {
+      headers: this.getHeaders()
+    });
     return response.json();
   },
 };

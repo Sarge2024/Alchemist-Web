@@ -54,7 +54,10 @@ export const plannerService = {
     try {
       const normalizedPlan = this.normalizeLeftovers(plan);
       const planRef = doc(db, `families/${normalizedPlan.familyId}/weeklyPlans`, `${normalizedPlan.profileId}_${normalizedPlan.id}`);
-      await setDoc(planRef, { ...normalizedPlan, updatedAt: Date.now() }, { merge: true });
+      
+      // Remove campos com valor undefined para evitar erro de gravação no Firestore
+      const cleanPlan = JSON.parse(JSON.stringify(normalizedPlan));
+      await setDoc(planRef, { ...cleanPlan, updatedAt: Date.now() }, { merge: true });
       
       // Sincroniza a lista de compras em segundo plano
       await this.syncShoppingList(normalizedPlan.familyId, normalizedPlan);
