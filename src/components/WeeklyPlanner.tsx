@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Plus, Minus, Sparkles, Check, Zap, Flame, Scale, Clock, Coffee, X, Search, Camera } from "lucide-react";
 import { Recipe, WeeklyPlan, Profile, IndustrialProduct } from "../types";
@@ -6,7 +6,8 @@ import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
 import { userService } from "../services/userService";
 import { productService } from "../services/productService";
-import ProductScanner from "./ProductScanner";
+
+const ProductScanner = lazy(() => import("./ProductScanner"));
 
 interface WeeklyPlannerProps {
   familyId: string | null;
@@ -849,13 +850,22 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       {/* Sub-modal do Scanner */}
       <AnimatePresence>
         {productScannerOpen && (
-          <ProductScanner
-            onProductRegistered={(prod) => {
-              setProductScannerOpen(false);
-              handleSelectProduct(prod);
-            }}
-            onClose={() => setProductScannerOpen(false)}
-          />
+          <Suspense fallback={
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl p-6 text-center">
+                <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="font-sans text-xs text-scientific-gray">Carregando câmera...</p>
+              </div>
+            </div>
+          }>
+            <ProductScanner
+              onProductRegistered={(prod) => {
+                setProductScannerOpen(false);
+                handleSelectProduct(prod);
+              }}
+              onClose={() => setProductScannerOpen(false)}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
     </motion.div>
