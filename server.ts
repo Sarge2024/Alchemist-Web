@@ -2,15 +2,19 @@
 // Proxy seguro entre o frontend SPA e o backend Alchemist.
 // Injeta x-api-key server-side para que a chave nunca seja exposta no browser.
 
-import express from 'express';
+import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
+import { GoogleGenAI, Type, Schema } from '@google/genai';
+import { findFoodInDatabase } from './server/services/supabase';
 
 dotenv.config();
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const app = express();
 const PORT = 3001;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // ==========================================
 // Configuração — API Key server-side only
@@ -196,6 +200,127 @@ app.get('/api/products', async (req, res) => {
         console.error("Erro ao listar produtos:", err.message);
         res.status(500).json({ error: "Falha ao listar produtos" });
     }
+});
+
+// ==========================================
+// Multimodal Plate Scanner (Gemini + Supabase)
+// ==========================================
+app.post('/api/analyze-plate', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { imageBase64, totalWeightGrams } = req.body;
+
+    if (!imageBase64 || !totalWeightGrams) {
+      res.status(400).json({ error: "Parâmetros 'imageBase64' e 'totalWeightGrams' são obrigatórios." });
+      return;
+    }
+
+    const targetWeight = Number(totalWeightGrams);
+
+    // 1. Solicitação de segmentação proporcional ao Gemini
+    const aiResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: imageBase64.split(',')[1] || imageBase64
+          }
+        },
+        `Analise visualmente a imagem deste prato. Identifique os alimentos presentes e estime a porcentagem de massa/peso que cada um representa em relação ao prato todo. 
+        A soma de todas as porcentagens de 'estimatedWeightPercentage' DEVE fechar em exatamente 100.`
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            dishName: { type: Type.STRING, description: "Nome comercial ou descritivo do prato." },
+            items: {
+              type: Type.ARRAY,
+              description: "Lista de ingredientes/alimentos detectados individualmente.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  detectedName: { type: Type.STRING, description: "Nome do item em português (ex: Arroz cozido, Feijão preto)." },
+                  estimatedWeightPercentage: { type: Type.NUMBER, description: "Porcentagem aproximada do peso total que este item ocupa (0 a 100)." }
+                },
+                required: ["detectedName", "estimatedWeightPercentage"]
+              }
+            }
+          },
+          required: ["dishName", "items"]
+        } as Schema
+      }
+    });
+
+    const resultText = aiResponse.text;
+    if (!resultText) throw new Error("A IA falhou em responder.");
+    const parsedAiResult = JSON.parse(resultText);
+
+    // 2. Cruzamento de dados e enriquecimento via Banco de Dados (Supabase)
+    const enrichedItems = [];
+    let totalCalories = 0;
+    let totalCarbs = 0;
+    let totalProtein = 0;
+    let totalFat = 0;
+
+    for (const item of parsedAiResult.items) {
+      const calculatedWeight = Number(((item.estimatedWeightPercentage / 100) * targetWeight).toFixed(1));
+      
+      const dbMatch = await findFoodInDatabase(item.detectedName);
+
+      if (dbMatch) {
+        const itemCalories = Number(((dbMatch.calories_per_100g / 100) * calculatedWeight).toFixed(1));
+        const itemCarbs = Number(((dbMatch.carbs_per_100g / 100) * calculatedWeight).toFixed(1));
+        const itemProtein = Number(((dbMatch.protein_per_100g / 100) * calculatedWeight).toFixed(1));
+        const itemFat = Number(((dbMatch.fat_per_100g / 100) * calculatedWeight).toFixed(1));
+
+        totalCalories += itemCalories;
+        totalCarbs += itemCarbs;
+        totalProtein += itemProtein;
+        totalFat += itemFat;
+
+        enrichedItems.push({
+          name: dbMatch.name,
+          searchQuery: item.detectedName,
+          weightGrams: calculatedWeight,
+          percentage: item.estimatedWeightPercentage,
+          calories: itemCalories,
+          source: dbMatch.source,
+          dbId: dbMatch.id,
+          macronutrients: { carbsGrams: itemCarbs, proteinGrams: itemProtein, fatGrams: itemFat }
+        });
+      } else {
+        enrichedItems.push({
+          name: `${item.detectedName} (Não localizado no banco)`,
+          searchQuery: item.detectedName,
+          weightGrams: calculatedWeight,
+          percentage: item.estimatedWeightPercentage,
+          calories: 0,
+          source: 'NÃO MAPEADO',
+          dbId: null,
+          macronutrients: { carbsGrams: 0, proteinGrams: 0, fatGrams: 0 }
+        });
+      }
+    }
+
+    // 3. Resposta Consolidada e Pronta para Renderização
+    res.json({
+      dishName: parsedAiResult.dishName,
+      inputTotalWeight: targetWeight,
+      items: enrichedItems,
+      totalNutrients: {
+        calories: Number(totalCalories.toFixed(1)),
+        carbohydrates: Number(totalCarbs.toFixed(1)),
+        protein: Number(totalProtein.toFixed(1)),
+        lipids: Number(totalFat.toFixed(1))
+      }
+    });
+
+  } catch (error) {
+    console.error("Erro no processamento do prato:", error);
+    res.status(500).json({ error: "Erro interno ao processar a pesagem computacional." });
+  }
 });
 
 app.listen(PORT, () => {

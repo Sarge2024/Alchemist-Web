@@ -4,7 +4,8 @@ export enum ActiveView {
   RECIPES = "recipes",
   SHOPPING = "shopping",
   FAMILY = "family",
-  HISTORY = "history"
+  HISTORY = "history",
+  SCANNER = "scanner"
 }
 
 export enum Role {

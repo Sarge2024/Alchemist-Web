@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, BookOpen, ShoppingCart, Users, History } from "lucide-react";
+import { LayoutDashboard, Calendar, BookOpen, ShoppingCart, Users, History, Camera } from "lucide-react";
 import { ActiveView } from "../types";
 
 interface BottomNavProps {
@@ -13,7 +13,8 @@ export default function BottomNav({ activeView, onViewChange }: BottomNavProps) 
     { view: ActiveView.PLANNER, label: "Cardápio", icon: Calendar },
     { view: ActiveView.SHOPPING, label: "Compras", icon: ShoppingCart },
     { view: ActiveView.FAMILY, label: "Família", icon: Users },
-    { view: ActiveView.HISTORY, label: "Histórico", icon: History }
+    { view: ActiveView.HISTORY, label: "Histórico", icon: History },
+    { view: ActiveView.SCANNER, label: "Scanner", icon: Camera }
   ];
 
   return (
