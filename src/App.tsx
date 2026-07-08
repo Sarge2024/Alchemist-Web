@@ -89,28 +89,28 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           <Dashboard
             currentProfile={currentProfile}
             onNavigateToView={(view) => setActiveView(view)}
-            familyId={familyId}
+            familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
           />
         );
       case ActiveView.PLANNER:
         return (
           <WeeklyPlanner 
-            familyId={familyId}
+            familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
           />
         );
       case ActiveView.RECIPES:
         return (
           <RecipeList 
-            familyId={familyId || null} 
+            familyId={effectiveFamilyId} 
             activeProfileId={activeProfileId} 
           />
         );
       case ActiveView.SHOPPING:
         return (
           <ShoppingList 
-            familyId={familyId}
+            familyId={effectiveFamilyId}
           />
         );
       case ActiveView.FAMILY:
@@ -120,22 +120,24 @@ export default function App({ initialProfiles, familyId }: AppProps) {
             onProfilesChange={handleProfilesChange}
             activeProfileId={activeProfileId}
             onSelectActiveProfile={setActiveProfileId}
-            familyId={familyId}
+            familyId={effectiveFamilyId}
           />
         );
       case ActiveView.HISTORY:
         return (
           <ConsumptionHistory 
-            familyId={familyId}
+            familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
           />
         );
       case ActiveView.SCANNER:
         return <PlateScanner />;
       default:
-        return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} familyId={familyId} activeProfileId={activeProfileId} />;
+        return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} familyId={effectiveFamilyId} activeProfileId={activeProfileId} />;
     }
   };
+
+  const effectiveFamilyId = familyId || "f-mock";
 
   return (
     <div className="min-h-screen bg-surface text-primary font-sans antialiased flex flex-col selection:bg-primary/10">

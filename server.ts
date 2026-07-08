@@ -317,9 +317,13 @@ app.post('/api/analyze-plate', async (req: Request, res: Response): Promise<void
       }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro no processamento do prato:", error);
-    res.status(500).json({ error: "Erro interno ao processar a pesagem computacional." });
+    res.status(500).json({ 
+      error: "Erro interno ao processar a pesagem computacional.",
+      details: error.message || String(error),
+      stack: error.stack
+    });
   }
 });
 
