@@ -73,15 +73,22 @@ export const plannerService = {
   normalizeLeftovers(plan: WeeklyPlan): WeeklyPlan {
     const newPlan = JSON.parse(JSON.stringify(plan)) as WeeklyPlan;
     
-    // Para cada refeição (meal) e cada prato (course)
-    for (let m = 0; m < 4; m++) {
-      for (let c = 0; c < 4; c++) {
-        for (let d = 0; d < newPlan.days.length; d++) {
-          const currentCourse = newPlan.days[d].meals[m].courses[c];
+    for (let d = 0; d < newPlan.days.length; d++) {
+      const day = newPlan.days[d];
+      if (!day.meals) continue;
+      
+      for (let m = 0; m < day.meals.length; m++) {
+        const meal = day.meals[m];
+        if (!meal.courses) continue;
+        
+        for (let c = 0; c < meal.courses.length; c++) {
+          const currentCourse = meal.courses[c];
           
-          if (!currentCourse.recipe) {
-            currentCourse.isLeftover = false;
-            delete currentCourse.sourceDayName;
+          if (!currentCourse || !currentCourse.recipe) {
+            if (currentCourse) {
+              currentCourse.isLeftover = false;
+              delete currentCourse.sourceDayName;
+            }
             continue;
           }
           
@@ -89,15 +96,16 @@ export const plannerService = {
             currentCourse.isLeftover = false;
             delete currentCourse.sourceDayName;
           } else {
-            const prevCourse = newPlan.days[d - 1].meals[m].courses[c];
-            const prevRecipe = prevCourse.recipe;
+            const prevMeal = newPlan.days[d - 1].meals?.[m];
+            const prevCourse = prevMeal?.courses?.[c];
+            const prevRecipe = prevCourse?.recipe;
             
             if (prevRecipe && prevRecipe.id === currentCourse.recipe.id && currentCourse.prepMode !== "daily") {
               currentCourse.isLeftover = true;
               
               // Encontra o dia original da preparação no lote (primeiro dia do lote)
               let sourceDayIndex = d - 1;
-              while (sourceDayIndex > 0 && newPlan.days[sourceDayIndex].meals[m].courses[c].isLeftover) {
+              while (sourceDayIndex > 0 && newPlan.days[sourceDayIndex].meals?.[m]?.courses?.[c]?.isLeftover) {
                 sourceDayIndex--;
               }
               currentCourse.sourceDayName = newPlan.days[sourceDayIndex].dayName;
