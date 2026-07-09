@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useRef } from "react";
+import React, { useState, useEffect, lazy, Suspense, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion"; // Changed to framer-motion matching typical Vite setup
 import { Plus, X, Search, Clock, Flame, Coffee, Sparkles, ChevronLeft, ChevronRight, Sunrise, Sun, Moon } from "lucide-react";
 import { Recipe, WeeklyPlan, Profile, IndustrialProduct } from "../types";
@@ -333,13 +333,13 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                         className="absolute right-0 top-10 bg-white rounded-xl shadow-xl border border-outline-variant/20 w-48 z-50 overflow-hidden"
                       >
                         <div className="flex flex-col">
-                          {["Café da Manhã", "Almoço", "Jantar", "Café da Tarde"].map((mealName) => (
+                          {["Café da Manhã", "Almoço", "Café da Tarde", "Jantar", "Ceia"].map((mealName) => (
                             <button 
                               key={mealName}
                               onClick={() => openRecipeModalForMeal(dayIndex, mealName)}
                               className="flex items-center justify-between px-4 py-3 hover:bg-lab-white transition-colors border-b border-outline-variant/10 last:border-b-0 text-sm font-medium text-on-surface"
                             >
-                              <span>{mealName === "Café da Tarde" ? "Lanche" : mealName}</span>
+                              <span>{mealName === "Café da Tarde" ? "Lanche da Tarde" : mealName}</span>
                               {mealIcons[mealName]}
                             </button>
                           ))}
