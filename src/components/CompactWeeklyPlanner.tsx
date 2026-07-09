@@ -418,8 +418,11 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                             <h4 className="text-sm font-semibold text-primary truncate">
                               {recipe.title}
                             </h4>
-                            <span className="font-sans text-[10px] text-scientific-gray uppercase">
-                              {recipe.nutrition?.calories || 0} kcal
+                            <span className="font-sans text-[10px] text-scientific-gray uppercase flex gap-2 flex-wrap mt-0.5">
+                              <span>🔥 {recipe.nutrition?.calories || 0} kcal</span>
+                              <span>• 🥩 {recipe.nutrition?.protein || 0}g</span>
+                              <span>• 🌾 {recipe.nutrition?.carbs || 0}g</span>
+                              <span>• 🥑 {recipe.nutrition?.fat || 0}g</span>
                             </span>
                           </div>
                         </div>
