@@ -60,7 +60,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
         }
 
         // Fetch available recipes
-        const response = await apiService.getRecipes({ limit: 50 });
+        const response = await apiService.getRecipes({ limit: 500 });
         setAvailableRecipes(response.data);
       } catch (err) {
         console.error("Erro ao carregar planejamento:", err);
@@ -760,7 +760,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
                           const isDessert = p.includes("Doces e Sobremesas");
-                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria");
+                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {

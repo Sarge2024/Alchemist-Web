@@ -72,7 +72,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
           setActiveProfile(currentProf);
         }
 
-        const response = await apiService.getRecipes({ limit: 50 });
+        const response = await apiService.getRecipes({ limit: 500 });
         setAvailableRecipes(response.data);
       } catch (err) {
         console.error("Erro ao carregar planejamento:", err);
@@ -421,7 +421,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
                           const isDessert = p.includes("Doces e Sobremesas");
-                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria");
+                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {
