@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from "motion/react";
 import { ShoppingCart, Plus, Check, Trash2, Sparkles } from "lucide-react";
 import { ShoppingItem } from "../types";
 import { shoppingService } from "../services/shoppingService";
+import { plannerService } from "../services/plannerService";
 
 interface ShoppingListProps {
   familyId: string | null;
+  activeProfileId: string | null;
 }
 
-export default function ShoppingList({ familyId }: ShoppingListProps) {
+export default function ShoppingList({ familyId, activeProfileId }: ShoppingListProps) {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -82,8 +84,109 @@ export default function ShoppingList({ familyId }: ShoppingListProps) {
   };
 
   const generateFromPlan = async () => {
-    setToastMessage("Sincronização em tempo real ativa! Seus ingredientes são atualizados conforme o Cardápio.");
-    setTimeout(() => setToastMessage(null), 4000);
+    if (!familyId || !activeProfileId) {
+      setToastMessage("Selecione um perfil primeiro.");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+    
+    setToastMessage("Sincronizando ingredientes do Cardápio...");
+    try {
+      const weekId = plannerService.getWeekId(0);
+      const plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
+      
+      if (!plan || plan.days.length === 0) {
+        setToastMessage("Nenhum cardápio encontrado para esta semana.");
+        setTimeout(() => setToastMessage(null), 3000);
+        return;
+      }
+      
+      const ingredientMap = new Map<string, { quantity: number, unit: string, category: string }>();
+      
+      plan.days.forEach(day => {
+        day.meals.forEach(meal => {
+          meal.courses.forEach(course => {
+            if (course.recipe) {
+              if (course.recipe.category === "PRODUTO" || (!course.recipe.ingredients || course.recipe.ingredients.length === 0)) {
+                 const nameLower = course.recipe.title.toLowerCase().trim();
+                 const current = ingredientMap.get(nameLower);
+                 if (current) {
+                    current.quantity += 1;
+                 } else {
+                    ingredientMap.set(nameLower, { quantity: 1, unit: "unid", category: "Produtos Genéricos" });
+                 }
+              } else if (course.recipe.ingredients) {
+                course.recipe.ingredients.forEach(ing => {
+                const nameLower = ing.name.toLowerCase().trim();
+                const current = ingredientMap.get(nameLower);
+                
+                const qtyMatch = ing.quantity.match(/([\d.,\s\/]+)\s*(.*)/);
+                let numQty = 1;
+                let strUnit = "unid";
+                
+                if (qtyMatch) {
+                   let qtyStr = qtyMatch[1].trim().replace(',', '.');
+                   if (qtyStr.includes('/')) {
+                     const parts = qtyStr.split('/');
+                     if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
+                       numQty = parseFloat(parts[0]) / parseFloat(parts[1]);
+                     }
+                   } else {
+                     numQty = parseFloat(qtyStr);
+                   }
+                   if (isNaN(numQty)) numQty = 1;
+                   strUnit = qtyMatch[2].trim() || "unid";
+                }
+                
+                let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
+                if (ing.group === "Hortifruti" || nameLower.match(/cebola|alho|tomate|alface|limão|batata|cenoura|fruta|salsa|cebolinha|coentro/)) {
+                  category = "Hortifruti";
+                } else if (nameLower.match(/leite|queijo|manteiga|ovo|creme|iogurte/)) {
+                  category = "Laticínios & Ovos";
+                }
+                
+                if (current && current.unit === strUnit) {
+                   current.quantity += numQty;
+                } else if (!current) {
+                   ingredientMap.set(nameLower, { quantity: numQty, unit: strUnit, category });
+                } else {
+                   ingredientMap.set(nameLower + ` (${strUnit})`, { quantity: numQty, unit: strUnit, category });
+                }
+              });
+            }
+            }
+          });
+        });
+      });
+      
+      const newItems: ShoppingItem[] = [];
+      let nextId = Date.now();
+      
+      ingredientMap.forEach((data, name) => {
+        newItems.push({
+          id: (nextId++).toString(),
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          category: data.category as any,
+          quantity: `${Math.round(data.quantity * 100) / 100} ${data.unit}`.trim(),
+          completed: false,
+          isManual: false
+        });
+      });
+      
+      const manualItems = items.filter(i => i.isManual);
+      const combined = [...manualItems, ...newItems];
+      
+      setItems(combined);
+      await saveList(combined);
+      
+      setToastMessage("Lista sincronizada com sucesso!");
+      setTimeout(() => setToastMessage(null), 3000);
+      
+    } catch (err) {
+      console.error(err);
+      setToastMessage("Erro ao sincronizar com o cardápio.");
+      setTimeout(() => setToastMessage(null), 3000);
+    }
   };
 
   const completedCount = items.filter((item) => item.completed).length;

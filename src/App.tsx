@@ -140,6 +140,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
         return (
           <ShoppingList 
             familyId={effectiveFamilyId}
+            activeProfileId={activeProfileId}
           />
         );
       case ActiveView.FAMILY:
