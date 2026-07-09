@@ -117,27 +117,35 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                  }
               } else if (course.recipe.ingredients) {
                 course.recipe.ingredients.forEach(ing => {
-                const nameLower = ing.name.toLowerCase().trim();
-                const current = ingredientMap.get(nameLower);
+                const nameLower = (ing.name || "").toLowerCase().trim();
+                if (!nameLower) return;
                 
-                const qtyMatch = ing.quantity.match(/([\d.,\s\/]+)\s*(.*)/);
                 let numQty = 1;
-                let strUnit = "unid";
+                let strUnit = (ing.unit || "").trim() || "unid";
                 
-                if (qtyMatch) {
-                   let qtyStr = qtyMatch[1].trim().replace(',', '.');
-                   if (qtyStr.includes('/')) {
-                     const parts = qtyStr.split('/');
-                     if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
-                       numQty = parseFloat(parts[0]) / parseFloat(parts[1]);
-                     }
-                   } else {
-                     numQty = parseFloat(qtyStr);
+                if (typeof ing.quantity === 'number') {
+                   numQty = ing.quantity;
+                } else if (typeof ing.quantity === 'string') {
+                   const qtyMatch = ing.quantity.match(/([\d.,\s\/]+)\s*(.*)/);
+                   if (qtyMatch) {
+                       let qStr = qtyMatch[1].trim().replace(',', '.');
+                       if (qStr.includes('/')) {
+                         const parts = qStr.split('/');
+                         if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
+                           numQty = parseFloat(parts[0]) / parseFloat(parts[1]);
+                         }
+                       } else {
+                         numQty = parseFloat(qStr);
+                       }
+                       if (isNaN(numQty)) numQty = 1;
+                       if (qtyMatch[2].trim()) strUnit = qtyMatch[2].trim();
                    }
-                   if (isNaN(numQty)) numQty = 1;
-                   strUnit = qtyMatch[2].trim() || "unid";
                 }
                 
+                // Aplicar escala do plano
+                numQty = numQty * (plan.portionScale / 2);
+                
+                const current = ingredientMap.get(nameLower);
                 let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
                 if (ing.group === "Hortifruti" || nameLower.match(/cebola|alho|tomate|alface|limão|batata|cenoura|fruta|salsa|cebolinha|coentro/)) {
                   category = "Hortifruti";
@@ -196,6 +204,21 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
 
   return (
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-12">
+      
+      {/* Toast */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-primary text-white px-4 py-2 rounded shadow text-sm"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <section className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end border-b border-outline-variant/30 pb-6">
         <div className="md:col-span-8">
           <h2 className="font-serif text-3xl font-bold text-primary">Lista de Compras</h2>

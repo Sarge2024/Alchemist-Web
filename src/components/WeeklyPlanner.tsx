@@ -28,6 +28,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   // Estados para o Modal de Seleção de Receitas
   const [recipeModalOpen, setRecipeModalOpen] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{dayIndex: number, mealIndex: number, courseIndex: number} | null>(null);
+  const [visibleRecipesCount, setVisibleRecipesCount] = useState(10);
 
   // Estados para produtos industrializados
   const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
@@ -60,7 +61,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
         }
 
         // Fetch available recipes
-        const response = await apiService.getRecipes({ limit: 500 });
+        const response = await apiService.getRecipes({ limit: 5000 });
         setAvailableRecipes(response.data);
       } catch (err) {
         console.error("Erro ao carregar planejamento:", err);
@@ -150,6 +151,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     setModalTab('recipes');
     setProductSearch('');
     setRecipeModalOpen(true);
+      setVisibleRecipesCount(10);
   };
   
   const handleSelectRecipe = async (recipe: Recipe) => {

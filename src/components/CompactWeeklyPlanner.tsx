@@ -27,6 +27,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
   // Modal states
   const [recipeModalOpen, setRecipeModalOpen] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{dayIndex: number, mealIndex: number, courseIndex: number} | null>(null);
+  const [visibleRecipesCount, setVisibleRecipesCount] = useState(10);
 
   // Products state for Modal
   const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
@@ -72,7 +73,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
           setActiveProfile(currentProf);
         }
 
-        const response = await apiService.getRecipes({ limit: 500 });
+        const response = await apiService.getRecipes({ limit: 5000 });
         setAvailableRecipes(response.data);
       } catch (err) {
         console.error("Erro ao carregar planejamento:", err);
@@ -156,6 +157,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
       setModalTab('recipes');
       setProductSearch('');
       setRecipeModalOpen(true);
+      setVisibleRecipesCount(10);
       setActivePopoverDayIndex(null); // Close the popover
     }
   };
