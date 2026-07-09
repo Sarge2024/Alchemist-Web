@@ -80,14 +80,14 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
       });
       
       if (isLoadMore) {
-        setApiRecipes(prev => [...prev, ...response.data]);
+        setApiRecipes(prev => [...prev, ...(response.data || [])]);
         setPage(page + 1);
       } else {
-        setApiRecipes(response.data);
+        setApiRecipes(response.data || []);
         setPage(1);
       }
       
-      setTotalPages(response.pagination.totalPages);
+      setTotalPages(response.pagination?.totalPages || 1);
     } catch (err) {
       console.error("Erro ao carregar receitas:", err);
     } finally {

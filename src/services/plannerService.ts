@@ -6,13 +6,18 @@ import { ShoppingItem, ShoppingListDoc } from '../types';
 import { shoppingService } from './shoppingService';
 
 export const plannerService = {
-  // Gera um ID de semana baseado na data atual (ex: 2026-W26)
-  getCurrentWeekId(): string {
+  // Gera um ID de semana baseado na data atual e em um offset (ex: 2026-W26)
+  getWeekId(offset: number = 0): string {
     const d = new Date();
+    d.setDate(d.getDate() + offset * 7);
     d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-W${weekNo}`;
+  },
+
+  getCurrentWeekId(): string {
+    return this.getWeekId(0);
   },
 
   // Busca o plano semanal de um perfil específico
@@ -235,15 +240,17 @@ export const plannerService = {
     }
   },
 
-  // Helper: Gera um plano semanal vazio para a semana atual
-  generateEmptyPlan(familyId: string, profileId: string, weekId: string): WeeklyPlan {
-    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+  // Helper: Gera um plano semanal vazio para uma semana específica (baseado no offset)
+  generateEmptyPlan(familyId: string, profileId: string, weekId: string, offset: number = 0): WeeklyPlan {
+    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
     const now = new Date();
+    now.setDate(now.getDate() + offset * 7);
     
     const planDays = days.map((dayName, index) => {
       const d = new Date(now);
-      // Ajusta para o dia correspondente da semana (Segunda = 1, etc)
-      const currentDay = d.getDay();
+      // Ajusta para o dia correspondente da semana (Segunda = 1, ..., Domingo = 7)
+      let currentDay = d.getDay();
+      if (currentDay === 0) currentDay = 7;
       const distance = (index + 1) - currentDay;
       d.setDate(d.getDate() + distance);
       

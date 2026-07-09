@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Minus, Sparkles, Check, Zap, Flame, Scale, Clock, Coffee, X, Search, Camera } from "lucide-react";
+import { Plus, Minus, Sparkles, Check, Zap, Flame, Scale, Clock, Coffee, X, Search, Camera, ChevronLeft, ChevronRight } from "lucide-react";
 import { Recipe, WeeklyPlan, Profile, IndustrialProduct } from "../types";
 import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
@@ -35,17 +35,18 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   const [availableProducts, setAvailableProducts] = useState<IndustrialProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productScannerOpen, setProductScannerOpen] = useState(false);
+  const [weekOffset, setWeekOffset] = useState<number>(0);
 
   useEffect(() => {
     async function loadData() {
       if (!familyId || !activeProfileId) return;
       setLoading(true);
       try {
-        const weekId = plannerService.getCurrentWeekId();
+        const weekId = plannerService.getWeekId(weekOffset);
         let plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
         
         if (!plan) {
-          plan = plannerService.generateEmptyPlan(familyId, activeProfileId, weekId);
+          plan = plannerService.generateEmptyPlan(familyId, activeProfileId, weekId, weekOffset);
           await plannerService.saveWeeklyPlan(plan);
         }
         
@@ -68,7 +69,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       }
     }
     loadData();
-  }, [familyId, activeProfileId]);
+  }, [familyId, activeProfileId, weekOffset]);
 
   useEffect(() => {
     if (!recipeModalOpen || modalTab !== 'products') return;
@@ -311,7 +312,28 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       {/* Header controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-outline-variant/30 pb-6">
         <div>
-          <h2 className="font-sans text-3xl font-bold text-primary tracking-tight">Cardápio Semanal</h2>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="font-sans text-3xl font-bold text-primary tracking-tight">Cardápio Semanal</h2>
+            <div className="flex items-center bg-surface-container rounded-lg p-1 border border-outline-variant/30">
+              <button 
+                onClick={() => setWeekOffset(prev => prev - 1)}
+                className="p-1 hover:bg-white rounded text-primary transition-colors"
+                title="Semana anterior"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="px-3 font-sans text-sm font-bold text-on-surface-variant min-w-[120px] text-center">
+                {weekOffset === 0 ? "Semana Atual" : weekOffset === 1 ? "Próxima Semana" : weekOffset === -1 ? "Semana Passada" : `Semana ${weekOffset > 0 ? '+' : ''}${weekOffset}`}
+              </span>
+              <button 
+                onClick={() => setWeekOffset(prev => prev + 1)}
+                className="p-1 hover:bg-white rounded text-primary transition-colors"
+                title="Próxima semana"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
           <p className="font-sans text-sm text-scientific-gray mt-1">
             Projete sua sequência de ingestão nutricional. Selecione pratos para cada refeição do dia.
           </p>

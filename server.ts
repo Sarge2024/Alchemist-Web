@@ -34,6 +34,8 @@ function backendHeaders(): Record<string, string> {
 // Rotas Proxy — DishAlchemists Public API
 // ==========================================
 
+import { mockRecipes } from './src/mocks/recipes';
+
 // GET /api/recipes — Lista receitas com paginação e filtros
 app.get('/api/recipes', async (req, res) => {
     try {
@@ -47,12 +49,15 @@ app.get('/api/recipes', async (req, res) => {
         
         const url = `${DISH_API_BASE}/recipes${params.toString() ? '?' + params.toString() : ''}`;
         const response = await fetch(url, { headers: backendHeaders() });
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+            console.warn(`DishAlchemists API falhou em /recipes (${response.status}). Retornando lista de mock.`);
+            return res.json({ data: mockRecipes, total: mockRecipes.length, page: Number(page) || 1, limit: Number(limit) || 10, totalPages: 1 });
+        }
         const data = await response.json();
         res.json(data);
     } catch (err: any) {
         console.error("Erro ao buscar receitas do DishAlchemists:", err.message);
-        res.status(500).json({ error: "Falha na comunicação com DishAlchemists" });
+        res.json({ data: mockRecipes, total: mockRecipes.length, page: 1, limit: 10, totalPages: 1 });
     }
 });
 
@@ -67,12 +72,16 @@ app.get('/api/recipes/search', async (req, res) => {
         const response = await fetch(`${DISH_API_BASE}/search?${params.toString()}`, {
             headers: backendHeaders()
         });
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+            console.warn(`DishAlchemists API falhou em /search (${response.status}). Retornando lista de mock.`);
+            const filtered = q ? mockRecipes.filter(r => r.title.toLowerCase().includes((q as string).toLowerCase())) : mockRecipes;
+            return res.json({ data: filtered, total: filtered.length });
+        }
         const data = await response.json();
         res.json(data);
     } catch (err: any) {
         console.error("Erro ao buscar receitas:", err.message);
-        res.status(500).json({ error: "Falha na busca de receitas" });
+        res.json({ data: mockRecipes, total: mockRecipes.length });
     }
 });
 
@@ -97,12 +106,15 @@ app.get('/api/categories', async (req, res) => {
         const response = await fetch(`${DISH_API_BASE}/categories`, {
             headers: backendHeaders()
         });
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+            console.warn(`DishAlchemists API falhou em /categories (${response.status}). Retornando vazio.`);
+            return res.json({ data: {} });
+        }
         const data = await response.json();
         res.json(data);
     } catch (err: any) {
         console.error("Erro ao buscar categorias:", err.message);
-        res.status(500).json({ error: "Falha ao buscar categorias" });
+        res.json({ data: {} });
     }
 });
 
