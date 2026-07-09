@@ -403,7 +403,44 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                     <p className="text-center text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      {availableRecipes.map((recipe) => (
+                      {availableRecipes
+                        .filter(recipe => {
+                          if (!targetSlot || !weeklyPlan) return true;
+                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
+                          
+                          // 1. Perfil ativo aprovação
+                          if (activeProfile?.approvedRecipes && activeProfile.approvedRecipes.length > 0) {
+                            const isApproved = activeProfile.approvedRecipes.some(r => r.recipeId === recipe.id && r.period === currentPeriod);
+                            if (!isApproved) return false;
+                          }
+                          
+                          // 2. Filtro pela Categoria do Slot (courseType)
+                          const p = recipe.tipo_prato || [];
+                          const m = recipe.momento || [];
+                          
+                          const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
+                          const isDessert = p.includes("Doces e Sobremesas");
+                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria");
+                          const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
+
+                          switch (courseType) {
+                            case "Entrada":
+                              return isStarter || isSnack;
+                            case "Sobremesa":
+                              return isDessert;
+                            case "Bebida":
+                              return isDrink;
+                            case "Lanche":
+                              return isSnack || isDessert || p.includes("Massas e Risotos");
+                            case "Prato Principal":
+                              if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false;
+                              return true;
+                            default:
+                              return true;
+                          }
+                        })
+                        .map((recipe) => (
                         <div
                           key={recipe.id}
                           className="border border-outline-variant/30 rounded-xl p-2 flex gap-3 items-center hover:border-primary active:bg-sage-wash cursor-pointer transition-all bg-white"
