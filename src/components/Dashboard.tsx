@@ -19,6 +19,7 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
   const [currentProteinPct, setCurrentProteinPct] = useState(0);
   const [currentFiberPct, setCurrentFiberPct] = useState(0);
   const [currentHydrationPct, setCurrentHydrationPct] = useState(0);
+  const [currentCarbsPct, setCurrentCarbsPct] = useState(0);
   const [todayMeals, setTodayMeals] = useState<any[]>([]);
 
   useEffect(() => {
@@ -38,6 +39,7 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
           setCurrentProteinPct(Math.min(Math.round((totalKcal / 2450) * 100), 100));
           setCurrentFiberPct(Math.min(Math.round((totalKcal / 2450) * 90), 100));
           setCurrentHydrationPct(Math.min(Math.round((totalKcal / 2450) * 80), 100));
+          setCurrentCarbsPct(Math.min(Math.round((totalKcal / 2450) * 105), 100));
         }
         
         // Load today's plan
@@ -131,7 +133,7 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 gap-6">
               {/* Protein Ring */}
               <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
                 <div className="relative w-24 h-24 mb-4">
@@ -198,6 +200,40 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
                   Fibras
                 </span>
                 <span className="font-sans text-xs text-on-surface font-medium">Meta: 30g/dia</span>
+              </div>
+
+              {/* Carbs Ring */}
+              <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
+                <div className="relative w-24 h-24 mb-4">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-surface-container"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    />
+                    <motion.path
+                      className="text-tertiary"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeDasharray="100"
+                      initial={{ strokeDashoffset: 100 }}
+                      animate={{ strokeDashoffset: 100 - currentCarbsPct }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center font-sans font-bold text-lg text-tertiary">
+                    {currentCarbsPct}%
+                  </div>
+                </div>
+                <span className="font-sans text-xs font-semibold text-scientific-gray uppercase tracking-widest mb-0.5">
+                  Carboidratos
+                </span>
+                <span className="font-sans text-xs text-on-surface font-medium">Meta: 280g/dia</span>
               </div>
 
               {/* Hydration Ring */}

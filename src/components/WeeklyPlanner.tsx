@@ -151,7 +151,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     setModalTab('recipes');
     setProductSearch('');
     setRecipeModalOpen(true);
-      setVisibleRecipesCount(10);
+    setVisibleRecipesCount(10);
   };
   
   const handleSelectRecipe = async (recipe: Recipe) => {
@@ -231,11 +231,39 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       
       const newPlan = { ...weeklyPlan, days: newDays };
       setWeeklyPlan(newPlan);
-      await savePlanDebounced(newPlan);
+      savePlanDebounced(newPlan);
       
-      setToastMessage("Receita prorrogada para o mesmo horário de amanhã!");
+      setToastMessage("Receita prorrogada para o dia seguinte!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } else {
+      setToastMessage("Não há slot equivalente no dia seguinte!");
       setTimeout(() => setToastMessage(null), 3000);
     }
+  };
+
+  const toggleLeftover = (dayIndex: number, mealIndex: number, courseIndex: number) => {
+    if (!weeklyPlan) return;
+    const newDays = [...weeklyPlan.days];
+    const newMeals = [...newDays[dayIndex].meals];
+    const newCourses = [...newMeals[mealIndex].courses];
+    
+    newCourses[courseIndex] = {
+      ...newCourses[courseIndex],
+      isLeftover: !newCourses[courseIndex].isLeftover
+    };
+    
+    if (newCourses[courseIndex].isLeftover && dayIndex > 0) {
+      newCourses[courseIndex].sourceDayName = newDays[dayIndex - 1].dayName;
+    } else {
+      newCourses[courseIndex].sourceDayName = undefined;
+    }
+    
+    newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
+    newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
+    
+    const newPlan = { ...weeklyPlan, days: newDays };
+    setWeeklyPlan(newPlan);
+    savePlanDebounced(newPlan);
   };
 
   const toggleCloseDay = async (dayIndex: number) => {
@@ -487,28 +515,43 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                           </div>
                         </div>
                         
-                        <div className="p-3 pt-0 flex justify-between items-center border-t border-outline-variant/10 mt-auto">
-                          <span className="font-serif text-xs font-bold text-scientific-gray">
-                            {Math.round((course.recipe.nutrition?.calories || 0) * (weeklyPlan.portionScale / 2))} kcal
-                          </span>
-                          {!isDayClosed && (
-                            <div className="flex gap-3">
-                              {selectedDayIndex < weeklyPlan.days.length - 1 && (
+                        <div className="p-3 pt-0 flex flex-col gap-2 border-t border-outline-variant/10 mt-auto">
+                          <div className="flex justify-between items-center w-full mt-2">
+                            <span className="font-serif text-xs font-bold text-scientific-gray">
+                              {Math.round((course.recipe.nutrition?.calories || 0) * (weeklyPlan.portionScale / 2))} kcal
+                            </span>
+                            {!isDayClosed && (
+                              <div className="flex gap-3">
+                                {selectedDayIndex < weeklyPlan.days.length - 1 && (
+                                  <button
+                                    onClick={() => extendToTomorrow(selectedDayIndex, mealIndex, courseIndex)}
+                                    className="text-[9px] uppercase font-bold text-primary hover:underline"
+                                    title="Prorrogar o uso da receita para o próximo dia"
+                                  >
+                                    Repetir Amanhã
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => extendToTomorrow(selectedDayIndex, mealIndex, courseIndex)}
-                                  className="text-[9px] uppercase font-bold text-primary hover:underline"
-                                  title="Prorrogar o uso da receita para o próximo dia"
+                                  onClick={() => removeFormula(selectedDayIndex, mealIndex, courseIndex)}
+                                  className="text-[9px] uppercase font-bold text-error hover:underline"
                                 >
-                                  Repetir Amanhã
+                                  Remover
                                 </button>
-                              )}
-                              <button
-                                onClick={() => removeFormula(selectedDayIndex, mealIndex, courseIndex)}
-                                className="text-[9px] uppercase font-bold text-error hover:underline"
-                              >
-                                Remover
-                              </button>
-                            </div>
+                              </div>
+                            )}
+                          </div>
+                          {!isDayClosed && selectedDayIndex > 0 && (
+                            <label className="flex items-center gap-1.5 cursor-pointer group pb-1">
+                              <input 
+                                type="checkbox" 
+                                checked={!!course.isLeftover} 
+                                onChange={() => toggleLeftover(selectedDayIndex, mealIndex, courseIndex)}
+                                className="w-3 h-3 text-primary border-outline-variant/50 rounded focus:ring-primary cursor-pointer"
+                              />
+                              <span className="font-sans text-[9px] font-medium text-scientific-gray group-hover:text-primary transition-colors">
+                                Porção restante do dia anterior
+                              </span>
+                            </label>
                           )}
                         </div>
                       </div>
@@ -745,20 +788,14 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                     <p className="text-center font-sans text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {availableRecipes
-                        .filter(recipe => {
+                      {(() => {
+                        let filteredRecipes = availableRecipes.filter(recipe => {
                           const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
                           const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
                           
-                          // 1. Perfil ativo aprovação
-                          if (activeProfile?.approvedRecipes && activeProfile.approvedRecipes.length > 0) {
-                            const isApproved = activeProfile.approvedRecipes.some(r => r.recipeId === recipe.id && r.period === currentPeriod);
-                            if (!isApproved) return false;
-                          }
-                          
-                          // 2. Filtro pela Categoria do Slot (courseType)
-                          const p = recipe.tipo_prato || [];
-                          const m = recipe.momento || [];
+                          const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
+                          const rawMom = (recipe as any).momento;
+                          const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
                           const isDessert = p.includes("Doces e Sobremesas");
@@ -766,48 +803,72 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {
-                            case "Entrada":
-                              return isStarter || isSnack;
-                            case "Sobremesa":
-                              return isDessert;
-                            case "Bebida":
-                              return isDrink;
-                            case "Lanche":
-                              return isSnack || isDessert || p.includes("Massas e Risotos");
-                            case "Prato Principal":
-                              if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false;
-                              return true;
-                            default:
-                              return true;
+                            case "Entrada": return isStarter || isSnack;
+                            case "Sobremesa": return isDessert;
+                            case "Bebida": return isDrink;
+                            case "Lanche": return isSnack || isDessert || p.includes("Massas e Risotos");
+                            case "Prato Principal": if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false; return true;
+                            default: return true;
                           }
-                        })
-                        .map((recipe) => (
-                          <div
-                            key={recipe.id}
-                            className="border border-outline-variant/30 rounded-xl p-3 flex gap-3 items-center hover:border-primary hover:shadow-md cursor-pointer transition-all bg-white"
-                            onClick={() => handleSelectRecipe(recipe)}
-                          >
-                            <img
-                              src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"}
-                              alt={recipe.title}
-                              className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <h4 className="font-sans text-xs font-bold text-primary leading-tight line-clamp-2">
-                                {recipe.title}
-                              </h4>
-                              <div className="flex gap-2 mt-1.5 items-center">
-                                <span className="font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-wider truncate">
-                                  {Array.isArray(recipe.category) ? recipe.category[0] : (recipe.category || "RECEITA")}
-                                </span>
-                                <span className="text-outline-variant/50 text-[10px]">•</span>
-                                <span className="font-serif text-[10px] font-bold text-primary">
-                                  {recipe.nutrition?.calories || 0} kcal
-                                </span>
+                        });
+
+                        const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                        
+                        // Sort so approved recipes appear first
+                        filteredRecipes.sort((a, b) => {
+                          const aApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === a.id) ? 1 : 0;
+                          const bApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === b.id) ? 1 : 0;
+                          return bApp - aApp;
+                        });
+
+                        return (
+                          <>
+                            {filteredRecipes.slice(0, visibleRecipesCount).map((recipe) => {
+                              const isApproved = activeProfile?.approvedRecipes?.some(r => r.recipeId === recipe.id);
+                              return (
+                                <div
+                                  key={recipe.id}
+                                  className={`border ${isApproved ? 'border-primary shadow-sm bg-primary/5' : 'border-outline-variant/30 bg-white'} rounded-xl p-3 flex gap-3 items-center hover:border-primary hover:shadow-md cursor-pointer transition-all`}
+                                  onClick={() => handleSelectRecipe(recipe)}
+                                >
+                                  <img
+                                    src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"}
+                                    alt={recipe.title}
+                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-sans text-xs font-bold text-primary leading-tight line-clamp-2">
+                                        {recipe.title}
+                                      </h4>
+                                      {isApproved && <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-bold uppercase shrink-0">Preferida</span>}
+                                    </div>
+                                    <div className="flex gap-2 mt-1.5 items-center">
+                                      <span className="font-sans text-[9px] font-bold text-scientific-gray uppercase tracking-wider truncate">
+                                        {Array.isArray(recipe.category) ? recipe.category[0] : (recipe.category || "RECEITA")}
+                                      </span>
+                                      <span className="text-outline-variant/50 text-[10px]">•</span>
+                                      <span className="font-serif text-[10px] font-bold text-primary">
+                                        {recipe.nutrition?.calories || 0} kcal
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {filteredRecipes.length > visibleRecipesCount && (
+                              <div className="col-span-1 sm:col-span-2 mt-2">
+                                <button
+                                  onClick={() => setVisibleRecipesCount(prev => prev + 10)}
+                                  className="w-full py-2 border border-outline-variant rounded-xl text-primary font-medium hover:bg-sage-wash transition-colors text-sm"
+                                >
+                                  Mostrar mais ({filteredRecipes.length - visibleRecipesCount})
+                                </button>
                               </div>
-                            </div>
-                          </div>
-                        ))}
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )
                 ) : (

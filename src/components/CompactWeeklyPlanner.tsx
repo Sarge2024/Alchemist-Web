@@ -28,9 +28,9 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
   const [recipeModalOpen, setRecipeModalOpen] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{dayIndex: number, mealIndex: number, courseIndex: number} | null>(null);
   const [visibleRecipesCount, setVisibleRecipesCount] = useState(10);
+  const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
 
   // Products state for Modal
-  const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
   const [productSearch, setProductSearch] = useState('');
   const [availableProducts, setAvailableProducts] = useState<IndustrialProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -198,6 +198,31 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
     await savePlanDebounced(newPlan);
   };
 
+  const toggleLeftover = (dayIndex: number, mealIndex: number, courseIndex: number) => {
+    if (!weeklyPlan || !familyId || !activeProfileId) return;
+    const newDays = [...weeklyPlan.days];
+    const newMeals = [...newDays[dayIndex].meals];
+    const newCourses = [...newMeals[mealIndex].courses];
+    
+    newCourses[courseIndex] = {
+      ...newCourses[courseIndex],
+      isLeftover: !newCourses[courseIndex].isLeftover
+    };
+    
+    if (newCourses[courseIndex].isLeftover && dayIndex > 0) {
+      newCourses[courseIndex].sourceDayName = newDays[dayIndex - 1].dayName;
+    } else {
+      newCourses[courseIndex].sourceDayName = undefined;
+    }
+    
+    newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
+    newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
+    
+    const newPlan = { ...weeklyPlan, days: newDays };
+    setWeeklyPlan(newPlan);
+    savePlanDebounced(newPlan);
+  };
+
   const getWeekRangeStr = () => {
     if (!weeklyPlan || weeklyPlan.days.length === 0) return "";
     const format = (dateStr: string) => {
@@ -225,7 +250,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white min-h-screen pb-20 font-sans">
+    <div className="bg-white min-h-screen pb-20 font-sans">
       
       {/* Toast */}
       <AnimatePresence>
@@ -242,28 +267,46 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
       </AnimatePresence>
 
       {/* Header compact view */}
-      <div className="px-4 py-4 border-b border-outline-variant/30 sticky top-0 bg-white z-40">
-        <h2 className="text-xl font-serif text-primary mb-4 text-center">Meu Plano de Refeições</h2>
-        
-        <div className="flex justify-between items-center text-sm font-semibold text-primary bg-surface-container rounded-lg p-2">
-          <button onClick={() => setWeekOffset(prev => prev - 1)} className="p-1 hover:bg-white rounded">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <span className="truncate">{getWeekRangeStr()}</span>
-          <button onClick={() => setWeekOffset(prev => prev + 1)} className="p-1 hover:bg-white rounded">
-            <ChevronRight className="w-5 h-5" />
-          </button>
+      <div className="px-4 md:px-6 py-4 border-b border-outline-variant/30 sticky top-0 bg-white z-40">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 max-w-7xl mx-auto">
+          <div>
+            <div className="flex flex-wrap items-center gap-3 mb-1">
+              <h2 className="font-sans text-3xl font-bold text-primary tracking-tight">Cardápio Semanal</h2>
+              <div className="flex items-center bg-surface-container rounded-lg p-1 border border-outline-variant/30">
+                <button 
+                  onClick={() => setWeekOffset(prev => prev - 1)}
+                  className="p-1 hover:bg-white rounded text-primary transition-colors"
+                  title="Semana anterior"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="px-3 font-sans text-sm font-bold text-on-surface-variant min-w-[120px] text-center">
+                  {weekOffset === 0 ? "Semana Atual" : weekOffset === 1 ? "Próxima Semana" : weekOffset === -1 ? "Semana Passada" : `Semana ${weekOffset > 0 ? '+' : ''}${weekOffset}`}
+                </span>
+                <button 
+                  onClick={() => setWeekOffset(prev => prev + 1)}
+                  className="p-1 hover:bg-white rounded text-primary transition-colors"
+                  title="Próxima semana"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <p className="font-sans text-sm text-scientific-gray mt-1">
+              Projete sua sequência de ingestão nutricional. Selecione pratos para cada refeição do dia.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Days List */}
-      <div className="flex flex-col">
+      <div className="flex flex-col max-w-md mx-auto pt-4 px-2">
         {weeklyPlan.days.map((day, dayIndex) => {
           // Check if day is today
           const isToday = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) === day.dateStr;
           
           // Get flat list of recipes for this day
-          const dayRecipes: {mealName: string, recipe: Recipe, courseIndex: number, mealIndex: number}[] = [];
+          const dayRecipes: {mealName: string, recipe: Recipe, courseIndex: number, mealIndex: number, isLeftover?: boolean}[] = [];
           day.meals.forEach((meal, mealIndex) => {
             meal.courses.forEach((course, courseIndex) => {
               if (course.recipe) {
@@ -271,7 +314,8 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                   mealName: meal.name,
                   recipe: course.recipe,
                   courseIndex,
-                  mealIndex
+                  mealIndex,
+                  isLeftover: course.isLeftover
                 });
               }
             });
@@ -293,15 +337,32 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                     ) : (
                       <div className="flex flex-col gap-2">
                         {dayRecipes.map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-3 bg-lab-white p-2 rounded-lg relative pr-8">
-                            <img src={item.recipe.image} alt={item.recipe.title} className="w-10 h-10 rounded-md object-cover" />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[10px] text-scientific-gray uppercase tracking-wider block">{item.mealName}</span>
-                              <p className="text-sm font-semibold text-primary truncate">{item.recipe.title}</p>
+                          <div key={idx} className="flex flex-col gap-2 bg-lab-white p-2 rounded-lg relative pr-8">
+                            <div className="flex items-center gap-3">
+                              <img src={item.recipe.image} alt={item.recipe.title} className="w-10 h-10 rounded-md object-cover" />
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[10px] text-scientific-gray uppercase tracking-wider block">{item.mealName}</span>
+                                <p className="text-sm font-semibold text-primary truncate">{item.recipe.title}</p>
+                              </div>
                             </div>
+                            
+                            {dayIndex > 0 && (
+                              <label className="flex items-center gap-1.5 cursor-pointer group mt-1">
+                                <input 
+                                  type="checkbox" 
+                                  checked={!!item.isLeftover} 
+                                  onChange={() => toggleLeftover(dayIndex, item.mealIndex, item.courseIndex)}
+                                  className="w-3 h-3 text-primary border-outline-variant/50 rounded focus:ring-primary cursor-pointer"
+                                />
+                                <span className="font-sans text-[9px] font-medium text-scientific-gray group-hover:text-primary transition-colors">
+                                  Porção restante do dia anterior
+                                </span>
+                              </label>
+                            )}
+
                             <button 
                               onClick={() => removeFormula(dayIndex, item.mealIndex, item.courseIndex)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-error opacity-50 hover:opacity-100"
+                              className="absolute right-2 top-2 p-1 text-error opacity-50 hover:opacity-100"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -405,21 +466,14 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                     <p className="text-center text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      {availableRecipes
-                        .filter(recipe => {
+                      {(() => {
+                        let filteredRecipes = availableRecipes.filter(recipe => {
                           if (!targetSlot || !weeklyPlan) return true;
-                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
                           const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
                           
-                          // 1. Perfil ativo aprovação
-                          if (activeProfile?.approvedRecipes && activeProfile.approvedRecipes.length > 0) {
-                            const isApproved = activeProfile.approvedRecipes.some(r => r.recipeId === recipe.id && r.period === currentPeriod);
-                            if (!isApproved) return false;
-                          }
-                          
-                          // 2. Filtro pela Categoria do Slot (courseType)
-                          const p = recipe.tipo_prato || [];
-                          const m = recipe.momento || [];
+                          const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
+                          const rawMom = (recipe as any).momento;
+                          const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
                           const isDessert = p.includes("Doces e Sobremesas");
@@ -427,45 +481,67 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {
-                            case "Entrada":
-                              return isStarter || isSnack;
-                            case "Sobremesa":
-                              return isDessert;
-                            case "Bebida":
-                              return isDrink;
-                            case "Lanche":
-                              return isSnack || isDessert || p.includes("Massas e Risotos");
-                            case "Prato Principal":
-                              if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false;
-                              return true;
-                            default:
-                              return true;
+                            case "Entrada": return isStarter || isSnack;
+                            case "Sobremesa": return isDessert;
+                            case "Bebida": return isDrink;
+                            case "Lanche": return isSnack || isDessert || p.includes("Massas e Risotos");
+                            case "Prato Principal": if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false; return true;
+                            default: return true;
                           }
-                        })
-                        .map((recipe) => (
-                        <div
-                          key={recipe.id}
-                          className="border border-outline-variant/30 rounded-xl p-2 flex gap-3 items-center hover:border-primary active:bg-sage-wash cursor-pointer transition-all bg-white"
-                          onClick={() => handleSelectRecipe(recipe)}
-                        >
-                          <img
-                            src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"}
-                            alt={recipe.title}
-                            className="w-14 h-14 rounded-lg object-cover"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-semibold text-primary truncate">
-                              {recipe.title}
-                            </h4>
-                            <span className="font-sans text-[10px] text-scientific-gray uppercase flex gap-2 flex-wrap mt-0.5">
-                              <span>🔥 {recipe.nutrition?.calories || 0} kcal</span>
-                              <span>• 🥩 {recipe.nutrition?.protein || 0}g</span>
-                              <span>• 🌾 {recipe.nutrition?.carbs || 0}g</span>
-                              <span>• 🥑 {recipe.nutrition?.fat || 0}g</span>
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        });
+
+                        const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                        
+                        // Sort so approved recipes appear first
+                        filteredRecipes.sort((a, b) => {
+                          const aApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === a.id) ? 1 : 0;
+                          const bApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === b.id) ? 1 : 0;
+                          return bApp - aApp;
+                        });
+
+                        return (
+                          <>
+                            {filteredRecipes.slice(0, visibleRecipesCount).map((recipe) => {
+                              const isApproved = activeProfile?.approvedRecipes?.some(r => r.recipeId === recipe.id);
+                              return (
+                                <div
+                                  key={recipe.id}
+                                  className={`border ${isApproved ? 'border-primary shadow-sm bg-primary/5' : 'border-outline-variant/30 bg-white'} rounded-xl p-2 flex gap-3 items-center hover:border-primary active:bg-sage-wash cursor-pointer transition-all`}
+                                  onClick={() => handleSelectRecipe(recipe)}
+                                >
+                                  <img
+                                    src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"}
+                                    alt={recipe.title}
+                                    className="w-14 h-14 rounded-lg object-cover"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="text-sm font-semibold text-primary truncate">
+                                        {recipe.title}
+                                      </h4>
+                                      {isApproved && <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-bold uppercase shrink-0">Preferida</span>}
+                                    </div>
+                                    <span className="font-sans text-[10px] text-scientific-gray uppercase flex gap-2 flex-wrap mt-0.5">
+                                      <span>🔥 {recipe.nutrition?.calories || 0} kcal</span>
+                                      <span>• 🥩 {recipe.nutrition?.protein || 0}g</span>
+                                      <span>• 🌾 {recipe.nutrition?.carbs || 0}g</span>
+                                      <span>• 🥑 {recipe.nutrition?.fat || 0}g</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {filteredRecipes.length > visibleRecipesCount && (
+                              <button
+                                onClick={() => setVisibleRecipesCount(prev => prev + 10)}
+                                className="w-full py-2 border border-outline-variant rounded-xl text-primary font-medium hover:bg-sage-wash transition-colors text-sm mt-2"
+                              >
+                                Mostrar mais ({filteredRecipes.length - visibleRecipesCount})
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )
                 ) : (

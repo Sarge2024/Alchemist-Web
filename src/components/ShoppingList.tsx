@@ -125,8 +125,9 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                 
                 if (typeof ing.quantity === 'number') {
                    numQty = ing.quantity;
-                } else if (typeof ing.quantity === 'string') {
-                   const qtyMatch = ing.quantity.match(/([\d.,\s\/]+)\s*(.*)/);
+                } else if (typeof (ing.quantity as any) === 'string') {
+                   const stringQty = ing.quantity as any as string;
+                   const qtyMatch = stringQty.match(/([\d.,\s\/]+)\s*(.*)/);
                    if (qtyMatch) {
                        let qStr = qtyMatch[1].trim().replace(',', '.');
                        if (qStr.includes('/')) {
@@ -144,21 +145,43 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                 
                 // Aplicar escala do plano
                 numQty = numQty * (plan.portionScale / 2);
+
+                // Normalização de Unidades
+                let normUnit = strUnit.toLowerCase().trim();
+                let normQty = numQty;
+                
+                // Volume
+                if (["ml", "mililitro", "mililitros"].includes(normUnit)) { normQty /= 1000; normUnit = "l"; }
+                else if (["xícara", "xicara", "xícaras", "xicaras"].includes(normUnit)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
+                else if (["colher de sopa", "colheres de sopa", "colher sopa", "sopa"].includes(normUnit)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
+                else if (["colher de chá", "colheres de chá", "colher cha", "chá"].includes(normUnit)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
+                
+                // Massa
+                if (["g", "grama", "gramas"].includes(normUnit)) { normQty /= 1000; normUnit = "kg"; }
+                else if (["quilo", "quilos", "quilograma", "quilogramas"].includes(normUnit)) { normUnit = "kg"; }
+                
+                // Genéricos
+                if (["unidade", "unidades", "unid.", ""].includes(normUnit)) { normUnit = "unid"; }
                 
                 const current = ingredientMap.get(nameLower);
                 let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
-                if (ing.group === "Hortifruti" || nameLower.match(/cebola|alho|tomate|alface|limão|batata|cenoura|fruta|salsa|cebolinha|coentro/)) {
+                if ((ing as any).group === "Hortifruti" || nameLower.match(/cebola|alho|tomate|alface|limão|batata|cenoura|fruta|salsa|cebolinha|coentro/)) {
                   category = "Hortifruti";
                 } else if (nameLower.match(/leite|queijo|manteiga|ovo|creme|iogurte/)) {
                   category = "Laticínios & Ovos";
                 }
                 
-                if (current && current.unit === strUnit) {
-                   current.quantity += numQty;
-                } else if (!current) {
-                   ingredientMap.set(nameLower, { quantity: numQty, unit: strUnit, category });
+                if (current) {
+                  if (current.unit === normUnit) {
+                    current.quantity += normQty;
+                  } else {
+                    const uniqueKey = nameLower + ` (${normUnit})`;
+                    const existingAlt = ingredientMap.get(uniqueKey);
+                    if (existingAlt) existingAlt.quantity += normQty;
+                    else ingredientMap.set(uniqueKey, { quantity: normQty, unit: normUnit, category });
+                  }
                 } else {
-                   ingredientMap.set(nameLower + ` (${strUnit})`, { quantity: numQty, unit: strUnit, category });
+                   ingredientMap.set(nameLower, { quantity: normQty, unit: normUnit, category });
                 }
               });
             }
@@ -171,11 +194,25 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
       let nextId = Date.now();
       
       ingredientMap.forEach((data, name) => {
+        let finalQuantity = data.quantity;
+        const nLower = name.toLowerCase();
+        
+        // Arredonda para cima se for item tipicamente unitário ou líquido vendido em embalagens de 1L
+        const isUnitary = data.unit === "unid" || 
+                         (data.unit === "l" && nLower.includes("leite")) ||
+                         nLower.match(/ovo|ovos|lata|caixa|garrafa|maço|pacote|pote|garrafa/);
+                         
+        if (isUnitary) {
+           finalQuantity = Math.ceil(data.quantity);
+        } else {
+           finalQuantity = Math.round(data.quantity * 100) / 100;
+        }
+
         newItems.push({
           id: (nextId++).toString(),
           name: name.charAt(0).toUpperCase() + name.slice(1),
           category: data.category as any,
-          quantity: `${Math.round(data.quantity * 100) / 100} ${data.unit}`.trim(),
+          quantity: `${finalQuantity} ${data.unit}`.trim(),
           completed: false,
           isManual: false
         });
