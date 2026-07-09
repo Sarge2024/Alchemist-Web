@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar";
 import BottomNav from "./components/BottomNav";
 import Dashboard from "./components/Dashboard";
 import WeeklyPlanner from "./components/WeeklyPlanner";
+import CompactWeeklyPlanner from "./components/CompactWeeklyPlanner";
 import RecipeList from "./components/RecipeList";
 import ShoppingList from "./components/ShoppingList";
 import FamilySection from "./components/FamilySection";
@@ -22,6 +23,9 @@ interface AppProps {
 export default function App({ initialProfiles, familyId }: AppProps) {
   // Navigation active view
   const [activeView, setActiveView] = useState<ActiveView>(ActiveView.DASHBOARD);
+  
+  // Planner mode
+  const [plannerViewMode, setPlannerViewMode] = useState<'compact' | 'classic'>('compact');
   
   // Custom Toast notification states
   const [globalToast, setGlobalToast] = useState<string | null>(null);
@@ -95,10 +99,35 @@ export default function App({ initialProfiles, familyId }: AppProps) {
         );
       case ActiveView.PLANNER:
         return (
-          <WeeklyPlanner 
-            familyId={effectiveFamilyId}
-            activeProfileId={activeProfileId}
-          />
+          <div className="flex flex-col w-full h-full">
+            <div className="flex justify-center p-3 bg-white border-b border-outline-variant/30 sticky top-0 z-40">
+              <div className="flex bg-surface-container rounded-lg p-1">
+                <button
+                  onClick={() => setPlannerViewMode('compact')}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${plannerViewMode === 'compact' ? 'bg-primary text-white shadow' : 'text-on-surface hover:bg-white'}`}
+                >
+                  Compacta
+                </button>
+                <button
+                  onClick={() => setPlannerViewMode('classic')}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${plannerViewMode === 'classic' ? 'bg-primary text-white shadow' : 'text-on-surface hover:bg-white'}`}
+                >
+                  Clássica
+                </button>
+              </div>
+            </div>
+            {plannerViewMode === 'compact' ? (
+              <CompactWeeklyPlanner 
+                familyId={effectiveFamilyId}
+                activeProfileId={activeProfileId}
+              />
+            ) : (
+              <WeeklyPlanner 
+                familyId={effectiveFamilyId}
+                activeProfileId={activeProfileId}
+              />
+            )}
+          </div>
         );
       case ActiveView.RECIPES:
         return (
