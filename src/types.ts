@@ -58,6 +58,9 @@ export interface Profile {
   localHabits?: string; // Text field para hábitos locais
   dietaryRestrictions?: string[]; // Seleções múltiplas ex: ["Sem Glúten", "Vegano"]
   allergens?: string; // Campo de texto livre para alergias específicas
+  mechanicalCapacity?: "normal" | "dysphagia_mild" | "no_teeth" | "moderate_difficulty";
+  intestinalTransit?: "normal" | "constipation" | "diarrhea";
+  comorbidities?: string[]; // e.g. ["diabetes", "hypertension", "dyslipidemia", "ckd", "gerd", "copd", "cv_risk", "malnutrition"]
 }
 
 export interface RecipeNutrition {

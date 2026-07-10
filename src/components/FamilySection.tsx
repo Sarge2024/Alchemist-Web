@@ -1,7 +1,8 @@
 import { useState, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Save, Edit, Trash2, Plus, AlertCircle, Check, UserPlus, Globe, HelpCircle, MessageCircle } from "lucide-react";
+import { ArrowLeft, Save, Edit, Trash2, Plus, AlertCircle, Check, UserPlus, Globe, HelpCircle, MessageCircle, Activity } from "lucide-react";
 import { Profile, Invite, Role } from "../types";
+import { dietaryAssessmentService, DietaryAssessmentResult } from "../services/dietaryAssessmentService";
 
 interface FamilySectionProps {
   profiles: Profile[];
@@ -25,6 +26,9 @@ export default function FamilySection({
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [activeTab, setActiveTab] = useState<"biometrics" | "clinical" | "habits">("biometrics");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Replaces calculateTDEE - computes assessment in real time
+  const [assessment, setAssessment] = useState<DietaryAssessmentResult | null>(null);
 
   const calculateTDEE = (profile: Profile) => {
     if (!profile.weight || !profile.height || !profile.age || !profile.gender) {
@@ -55,11 +59,29 @@ export default function FamilySection({
     return Math.round(tdee);
   };
 
-  const updateBiometrics = (updates: Partial<Profile>) => {
+  const handleComorbidityToggle = (comorbidity: string) => {
     if (!editingProfile) return;
-    const updated = { ...editingProfile, ...updates };
-    const newKcal = calculateTDEE(updated);
-    setEditingProfile({ ...updated, dailyCalories: newKcal });
+    const current = editingProfile.comorbidities || [];
+    const newCom = current.includes(comorbidity)
+      ? current.filter(c => c !== comorbidity)
+      : [...current, comorbidity];
+    updateProfileWithAssessment({ comorbidities: newCom });
+  };
+
+  const updateProfileWithAssessment = (updates: Partial<Profile>) => {
+    if (!editingProfile) return;
+    const newProfile = { ...editingProfile, ...updates };
+    setEditingProfile(newProfile);
+    
+    // Process algorithm automatically on changes
+    if (newProfile.age && newProfile.weight && newProfile.height && newProfile.gender) {
+      const result = dietaryAssessmentService.assessProfile(newProfile);
+      setAssessment(result);
+    }
+  };
+
+  const updateBiometrics = (updates: Partial<Profile>) => {
+    updateProfileWithAssessment(updates);
   };
 
   const [newDependentName, setNewDependentName] = useState("");
@@ -69,6 +91,18 @@ export default function FamilySection({
   const [isAdding, setIsAdding] = useState(false);
 
   // Allergies & dietary preset helpers
+  const availableComorbidities = ["diabetes", "hypertension", "dyslipidemia", "ckd", "gerd", "copd", "cv_risk", "malnutrition"];
+  const comorbLabels: Record<string, string> = {
+    diabetes: "Diabetes Mellitus",
+    hypertension: "Hipertensão",
+    dyslipidemia: "Dislipidemia",
+    ckd: "Doença Renal Crônica",
+    gerd: "Refluxo/Gastrite",
+    copd: "DPOC",
+    cv_risk: "Risco Cardiovascular",
+    malnutrition: "Desnutrição/Risco"
+  };
+
   const availableAllergies = ["Amendoim", "Glúten", "Lactose", "Frutos do Mar", "Soja", "Nozes"];
   const availableProtocols = ["Vegano", "Cetogênico", "Baixo Carbo", "Equilibrado", "Paleo"];
 
@@ -591,15 +625,40 @@ export default function FamilySection({
                       </div>
                     </div>
                     
-                    <div className="bg-primary/5 border border-primary/20 rounded p-4 flex items-center justify-between">
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col justify-between relative overflow-hidden">
+                       <div className="absolute top-0 right-0 p-4 opacity-10 text-primary pointer-events-none">
+                          <Activity className="w-16 h-16" />
+                       </div>
                        <div>
-                         <span className="block text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Cálculo de Energia (TDEE)</span>
-                         <span className="text-2xl font-serif font-bold text-primary">{editingProfile.dailyCalories} <span className="text-sm font-sans font-normal text-scientific-gray">kcal / dia</span></span>
+                         <span className="block text-[10px] text-primary font-bold uppercase tracking-wider mb-2">Sugestão do Motor Nutricional (Mifflin-St Jeor)</span>
+                         <div className="flex items-end gap-3 mb-4">
+                           <span className="text-3xl font-serif font-bold text-primary leading-none">
+                             {assessment ? assessment.calculatedCalories : editingProfile.dailyCalories} 
+                             <span className="text-sm font-sans font-normal text-scientific-gray ml-1">kcal / dia</span>
+                           </span>
+                           {assessment && (
+                             <button 
+                               onClick={() => updateProfileWithAssessment({ 
+                                  dailyCalories: assessment.calculatedCalories,
+                                  proteinPercentage: assessment.calculatedMacros.protein,
+                                  carbsPercentage: assessment.calculatedMacros.carbs,
+                                  fatPercentage: assessment.calculatedMacros.fat
+                               })}
+                               className="text-[10px] font-bold text-white bg-primary px-3 py-1.5 rounded-full hover:bg-primary/90 transition-colors cursor-pointer shadow-sm"
+                             >
+                               APLICAR SUGESTÃO
+                             </button>
+                           )}
+                         </div>
                        </div>
-                       <div className="text-right text-[10px] text-scientific-gray max-w-[150px]">
-                          Cálculo automático baseado no IMB de Harris-Benedict.
-                       </div>
-                    </div>
+                       
+                       {assessment && (
+                         <div className="bg-white/80 p-3 rounded-lg border border-primary/10">
+                           <span className="text-[9px] uppercase font-bold text-scientific-gray tracking-wider block mb-1">Prescrição Calculada</span>
+                           <span className="font-sans text-xs font-semibold text-primary">{assessment.prescriptionText}</span>
+                         </div>
+                       )}
+                     </div>
                   </div>
 
                   {/* Dynamic Targets & Macro slider calculations */}
@@ -746,6 +805,59 @@ export default function FamilySection({
                     <div className="space-y-3">
                       <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
                         Comorbidades e Condições
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {availableComorbidities.map((c) => {
+                          const isSelected = editingProfile.comorbidities?.includes(c);
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => handleComorbidityToggle(c)}
+                              className={`px-3 py-1.5 rounded font-sans text-xs font-semibold border transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-secondary text-white border-secondary shadow-sm"
+                                  : "bg-surface text-primary border-outline-variant/40 hover:bg-sage-wash"
+                              }`}
+                            >
+                              {comorbLabels[c]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-2 uppercase tracking-wider text-[10px]">Capacidade Mecânica (Disfagia/Odonto)</label>
+                        <select 
+                          value={editingProfile.mechanicalCapacity || "normal"} 
+                          onChange={e => updateProfileWithAssessment({ mechanicalCapacity: e.target.value as any })} 
+                          className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold"
+                        >
+                          <option value="normal">Capacidade Normal</option>
+                          <option value="dysphagia_mild">Disfagia (Dificuldade de Engolir)</option>
+                          <option value="no_teeth">Ausência de Prótese Dentária</option>
+                          <option value="moderate_difficulty">Dificuldade Moderada / Odinofagia</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-2 uppercase tracking-wider text-[10px]">Trânsito Intestinal</label>
+                        <select 
+                          value={editingProfile.intestinalTransit || "normal"} 
+                          onChange={e => updateProfileWithAssessment({ intestinalTransit: e.target.value as any })} 
+                          className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold"
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="constipation">Constipação</option>
+                          <option value="diarrhea">Diarreia</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Alergias Comuns
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {availableAllergies.map((allergy) => {
