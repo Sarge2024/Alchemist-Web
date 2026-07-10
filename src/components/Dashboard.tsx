@@ -4,6 +4,8 @@ import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight, 
 import { Profile, Recipe, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
 import { plannerService } from "../services/plannerService";
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 interface DashboardProps {
   key?: string;
@@ -36,105 +38,135 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadDashboardData() {
-      if (!familyId || !activeProfileId) {
-        setPlannedMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
-        setActualMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
-        setPlannedFiber(0);
-        setActualFiber(0);
-        setTodayMeals([]);
-        setLoading(false);
-        return;
-      }
+    if (!familyId || !activeProfileId) {
+      setPlannedMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+      setActualMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+      setPlannedFiber(0);
+      setActualFiber(0);
+      setTodayMeals([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    // Use local time for the date string to avoid timezone offset issues (e.g. late night saving as tomorrow)
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const dateId = `${year}-${month}-${day}`;
+    
+    const weekId = plannerService.getCurrentWeekId();
+    
+    const d = today.getDay();
+    const currentDayIndex = d === 0 ? 6 : d - 1; // 0 is Sunday -> index 6
+    
+    const planRef = doc(db, `families/${familyId}/weeklyPlans`, `${activeProfileId}_${weekId}`);
+    const logRef = doc(db, `families/${familyId}/consumptionLogs`, `${activeProfileId}_${dateId}`);
+
+    let currentPlan: any = null;
+    let currentLog: any = null;
+    
+    const updateDashboard = () => {
+      let pMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+      let aMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+      let pFiber = 0;
+      let aFiber = 0;
+      let plannedMealsData: any[] = [];
       
-      setLoading(true);
-      const dateId = consumptionService.formatDateId(new Date());
-      const weekId = plannerService.getCurrentWeekId();
-      
-      try {
-        let pMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
-        let aMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
-        let pFiber = 0;
-        let aFiber = 0;
-        
-        // Load today's plan
-        const plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
-        let plannedMealsData: any[] = [];
-        
-        if (plan) {
-          const currentDayIndex = Math.max(0, new Date().getDay() - 1); // 1 = Monday
-          const todayPlan = plan.days[currentDayIndex];
-          
-          if (todayPlan) {
-            todayPlan.meals.forEach((meal, mIdx) => {
-              meal.courses.forEach((course, cIdx) => {
-                if (course.recipe) {
-                  const rId = `planned-${mIdx}-${cIdx}`;
-                  const cal = course.recipe.nutrition?.calories || 0;
-                  const prot = course.recipe.nutrition?.protein || 0;
-                  const carb = course.recipe.nutrition?.carbs || 0;
-                  const fat = course.recipe.nutrition?.fat || 0;
-                  const estCost = course.recipe.estimatedCost || (cal * 0.024); // Fallback mock: 0.024 R$ per kcal
-                  
-                  pMacros.kcal += cal;
-                  pMacros.protein += prot;
-                  pMacros.carbs += carb;
-                  pMacros.fat += fat;
-                  pFiber += (carb * 0.1); // mock fiber
-                  
-                  plannedMealsData.push({
-                    id: rId,
-                    name: course.recipe.title,
-                    description: course.recipe.description,
-                    image: course.recipe.image,
-                    nutrition: {
-                      calories: cal,
-                      protein: prot,
-                      carbs: carb,
-                      fat: fat
-                    },
-                    estimatedCost: estCost,
-                    time: meal.name,
-                    status: "PENDING"
-                  });
+      if (currentPlan && currentPlan.days) {
+        const todayPlan = currentPlan.days[currentDayIndex];
+        if (todayPlan && todayPlan.meals) {
+          todayPlan.meals.forEach((meal: any, mIdx: number) => {
+            if (!meal.courses) return;
+            meal.courses.forEach((course: any, cIdx: number) => {
+              if (course.recipe) {
+                const rId = `planned-${mIdx}-${cIdx}`;
+                const cal = course.recipe.nutrition?.calories || 0;
+                const prot = course.recipe.nutrition?.protein || 0;
+                const carb = course.recipe.nutrition?.carbs || 0;
+                const fat = course.recipe.nutrition?.fat || 0;
+                const estCost = course.recipe.estimatedCost || (cal * 0.024); // Fallback mock
+                
+                pMacros.kcal += cal;
+                pMacros.protein += prot;
+                pMacros.carbs += carb;
+                pMacros.fat += fat;
+                pFiber += (carb * 0.1); // mock fiber
+                
+                let mealStatus = "PENDING";
+                if (currentLog && currentLog.entries) {
+                  const entry = currentLog.entries.find((e: any) => e.plannedMealRef === rId);
+                  if (entry) {
+                    mealStatus = entry.status;
+                  }
                 }
-              });
+                
+                plannedMealsData.push({
+                  id: rId,
+                  name: course.recipe.title,
+                  description: course.recipe.description,
+                  image: course.recipe.image,
+                  nutrition: {
+                    calories: cal,
+                    protein: prot,
+                    carbs: carb,
+                    fat: fat
+                  },
+                  estimatedCost: estCost,
+                  time: meal.name,
+                  status: mealStatus
+                });
+              }
             });
-          }
-        }
-        
-        // Load consumption logs for gauges
-        const logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
-        if (logDoc) {
-          aMacros.kcal = logDoc.totalCalories || 0;
-          aMacros.protein = logDoc.totalProtein || 0;
-          aMacros.carbs = logDoc.totalCarbs || 0;
-          aMacros.fat = logDoc.totalFat || 0;
-          aFiber = (aMacros.carbs * 0.1); // mock
-          
-          // Update meal statuses based on logs
-          plannedMealsData = plannedMealsData.map(meal => {
-            const entry = logDoc.entries.find(e => e.plannedMealRef === meal.id);
-            if (entry) {
-              return { ...meal, status: entry.status };
-            }
-            return meal;
           });
         }
-        
-        setPlannedMacros(pMacros);
-        setActualMacros(aMacros);
-        setPlannedFiber(pFiber);
-        setActualFiber(aFiber);
-        setTodayMeals(plannedMealsData);
-
-      } catch (e) {
-        console.error("Erro ao carregar dashboard:", e);
-      } finally {
-        setLoading(false);
       }
-    }
-    loadDashboardData();
+      
+      if (currentLog) {
+        aMacros.kcal = currentLog.totalCalories || 0;
+        aMacros.protein = currentLog.totalProtein || 0;
+        aMacros.carbs = currentLog.totalCarbs || 0;
+        aMacros.fat = currentLog.totalFat || 0;
+        aFiber = (aMacros.carbs * 0.1);
+      }
+      
+      setPlannedMacros(pMacros);
+      setActualMacros(aMacros);
+      setPlannedFiber(pFiber);
+      setActualFiber(aFiber);
+      setTodayMeals(plannedMealsData);
+      setLoading(false);
+    };
+
+    const unsubPlan = onSnapshot(planRef, (docSnap) => {
+      if (docSnap.exists()) {
+        currentPlan = docSnap.data();
+      } else {
+        currentPlan = null;
+      }
+      updateDashboard();
+    }, (error) => {
+      console.error("Erro ao buscar plano semanal:", error);
+      setLoading(false);
+    });
+
+    const unsubLog = onSnapshot(logRef, (docSnap) => {
+      if (docSnap.exists()) {
+        currentLog = docSnap.data();
+      } else {
+        currentLog = null;
+      }
+      updateDashboard();
+    }, (error) => {
+      console.error("Erro ao buscar consumo:", error);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubPlan();
+      unsubLog();
+    };
   }, [familyId, activeProfileId]);
 
   const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING", pct: number = 100) => {
