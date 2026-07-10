@@ -21,6 +21,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   const [availableRecipes, setAvailableRecipes] = useState<Recipe[]>([]);
   const [autoAdjusting, setAutoAdjusting] = useState<boolean>(false);
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
+  const [allMembers, setAllMembers] = useState<Profile[]>([]);
   
   // Controle de abas para os dias da semana
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
@@ -55,6 +56,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
 
         // Carrega o perfil ativo para obter metas calóricas/macros
         const members = await userService.getFamilyMembers(familyId);
+        setAllMembers(members);
         const currentProf = members.find(p => p.id === activeProfileId);
         if (currentProf) {
           setActiveProfile(currentProf);
@@ -155,146 +157,180 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   };
   
   const handleSelectRecipe = async (recipe: Recipe) => {
-    if (!weeklyPlan || !targetSlot) return;
+    if (!familyId || !targetSlot) return;
+    setToastMessage("Sincronizando cardápio para todos os membros...");
     
-    // 1. Calcular o Peso Base da Receita Original
+    const { dayIndex, mealIndex, courseIndex } = targetSlot;
+    
     let baseWeight = 0;
     let missingWeightData = false;
     
     if (recipe.ingredients && recipe.ingredients.length > 0) {
       recipe.ingredients.forEach(ing => {
-        // Tenta usar o peso limpo, se não, tenta usar a quantidade (se for g ou ml)
         if (ing.cleanWeight) {
           baseWeight += ing.cleanWeight;
         } else if (ing.quantity && (ing.unit.toLowerCase() === 'g' || ing.unit.toLowerCase() === 'ml')) {
           baseWeight += ing.quantity;
         } else {
           missingWeightData = true;
-          // Fallback para ingredientes sem unidade de peso clara
           baseWeight += 50; 
         }
       });
     }
     
-    // Se não tiver ingredientes, vamos estimar pelo peso da porção ou calorias
     if (baseWeight === 0 && recipe.nutrition) {
-       // aproximação grotesca: 1g = 1.5 kcal para pratos mistos
        baseWeight = recipe.nutrition.calories / 1.5;
        if (baseWeight === 0) baseWeight = 450; 
     }
     
-    // 2. Definir Alvo e Calcular Fator
-    const targetWeight = activeProfile?.mealWeightPattern || 450;
-    const scaleFactor = targetWeight / baseWeight;
+    // Broadcast para todos os membros
+    const promises = allMembers.map(async (member) => {
+      const weekId = plannerService.getWeekId(weekOffset);
+      let memberPlan = await plannerService.getWeeklyPlan(familyId, member.id, weekId);
+      if (!memberPlan) {
+        memberPlan = plannerService.generateEmptyPlan(familyId, member.id, weekId, weekOffset);
+      }
+      
+      const targetWeight = member.mealWeightPattern || 450;
+      const scaleFactor = targetWeight / baseWeight;
+      
+      const scaledRecipe: Recipe = {
+        ...recipe,
+        nutrition: {
+          calories: Math.round((recipe.nutrition?.calories || 0) * scaleFactor),
+          protein: Math.round((recipe.nutrition?.protein || 0) * scaleFactor * 10) / 10,
+          carbs: Math.round((recipe.nutrition?.carbs || 0) * scaleFactor * 10) / 10,
+          fat: Math.round((recipe.nutrition?.fat || 0) * scaleFactor * 10) / 10,
+        },
+        estimatedCost: recipe.estimatedCost ? recipe.estimatedCost * scaleFactor : undefined,
+        ingredients: recipe.ingredients?.map(ing => ({
+          ...ing,
+          quantity: Math.round(ing.quantity * scaleFactor * 100) / 100,
+          cleanWeight: ing.cleanWeight ? ing.cleanWeight * scaleFactor : undefined,
+          grossWeight: ing.grossWeight ? ing.grossWeight * scaleFactor : undefined,
+        }))
+      };
+      
+      const newDays = [...memberPlan.days];
+      const newMeals = [...newDays[dayIndex].meals];
+      const newCourses = [...newMeals[mealIndex].courses];
+      
+      newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: scaledRecipe };
+      newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
+      newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
+      
+      const newPlan = { ...memberPlan, days: newDays };
+      await plannerService.saveWeeklyPlan(newPlan);
+      
+      if (member.id === activeProfileId) {
+        setWeeklyPlan(newPlan);
+      }
+    });
     
-    // 3. Escalar a Receita
-    const scaledRecipe: Recipe = {
-      ...recipe,
-      nutrition: {
-        calories: Math.round((recipe.nutrition?.calories || 0) * scaleFactor),
-        protein: Math.round((recipe.nutrition?.protein || 0) * scaleFactor * 10) / 10,
-        carbs: Math.round((recipe.nutrition?.carbs || 0) * scaleFactor * 10) / 10,
-        fat: Math.round((recipe.nutrition?.fat || 0) * scaleFactor * 10) / 10,
-      },
-      estimatedCost: recipe.estimatedCost ? recipe.estimatedCost * scaleFactor : undefined,
-      ingredients: recipe.ingredients?.map(ing => ({
-        ...ing,
-        quantity: Math.round(ing.quantity * scaleFactor * 100) / 100,
-        cleanWeight: ing.cleanWeight ? ing.cleanWeight * scaleFactor : undefined,
-        grossWeight: ing.grossWeight ? ing.grossWeight * scaleFactor : undefined,
-      }))
-    };
-    
-    const { dayIndex, mealIndex, courseIndex } = targetSlot;
-    const newDays = [...weeklyPlan.days];
-    const newMeals = [...newDays[dayIndex].meals];
-    const newCourses = [...newMeals[mealIndex].courses];
-    
-    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: scaledRecipe };
-    newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
-    newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
-    
-    const newPlan = { ...weeklyPlan, days: newDays };
-    setWeeklyPlan(newPlan);
-    await savePlanDebounced(newPlan);
+    await Promise.all(promises);
     
     setRecipeModalOpen(false);
     setTargetSlot(null);
     
-    // 4. Notificar Usuário
     if (missingWeightData) {
-      setToastMessage(`⚠️ Atenção: Receita ajustada para ${targetWeight}g, mas alguns ingredientes não possuíam unidade de peso. Verifique o cadastro.`);
+      setToastMessage(`⚠️ Cardápio unificado aplicado. Alguns ingredientes não possuíam unidade de peso.`);
     } else {
-      setToastMessage(`✅ Receita perfeitamente dimensionada para o alvo de ${targetWeight}g do membro.`);
+      setToastMessage(`✅ Cardápio unificado aplicado com sucesso a todos os membros!`);
     }
     setTimeout(() => setToastMessage(null), 5000);
   };
   
   const removeFormula = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
-    if (!weeklyPlan) return;
+    if (!familyId) return;
     
-    const newDays = [...weeklyPlan.days];
-    const newMeals = [...newDays[dayIndex].meals];
-    const newCourses = [...newMeals[mealIndex].courses];
+    const promises = allMembers.map(async (member) => {
+      const weekId = plannerService.getWeekId(weekOffset);
+      let memberPlan = await plannerService.getWeeklyPlan(familyId, member.id, weekId);
+      if (!memberPlan) return; // Se o membro não tem plano, não há o que remover
+      
+      const newDays = [...memberPlan.days];
+      const newMeals = [...newDays[dayIndex].meals];
+      const newCourses = [...newMeals[mealIndex].courses];
+      
+      newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: undefined, prepMode: undefined, isLeftover: false, sourceDayName: undefined };
+      newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
+      newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
+      
+      const newPlan = { ...memberPlan, days: newDays };
+      await plannerService.saveWeeklyPlan(newPlan);
+      
+      if (member.id === activeProfileId) {
+        setWeeklyPlan(newPlan);
+      }
+    });
     
-    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: undefined, prepMode: undefined, isLeftover: false, sourceDayName: undefined };
-    newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
-    newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
-    
-    const newPlan = { ...weeklyPlan, days: newDays };
-    setWeeklyPlan(newPlan);
-    await savePlanDebounced(newPlan);
+    await Promise.all(promises);
   };
 
   const setPrepMode = async (dayIndex: number, mealIndex: number, courseIndex: number, mode: "batch" | "daily") => {
-    if (!weeklyPlan) return;
+    if (!familyId) return;
     
-    const newDays = [...weeklyPlan.days];
-    const newMeals = [...newDays[dayIndex].meals];
-    const newCourses = [...newMeals[mealIndex].courses];
+    const promises = allMembers.map(async (member) => {
+      const weekId = plannerService.getWeekId(weekOffset);
+      let memberPlan = await plannerService.getWeeklyPlan(familyId, member.id, weekId);
+      if (!memberPlan) return;
+      
+      const newDays = [...memberPlan.days];
+      const newMeals = [...newDays[dayIndex].meals];
+      const newCourses = [...newMeals[mealIndex].courses];
+      
+      newCourses[courseIndex] = { ...newCourses[courseIndex], prepMode: mode };
+      newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
+      newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
+      
+      const newPlan = { ...memberPlan, days: newDays };
+      await plannerService.saveWeeklyPlan(newPlan);
+      
+      if (member.id === activeProfileId) {
+        setWeeklyPlan(newPlan);
+      }
+    });
     
-    newCourses[courseIndex] = {
-      ...newCourses[courseIndex],
-      prepMode: mode
-    };
-    newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
-    newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
-    
-    const newPlan = { ...weeklyPlan, days: newDays };
-    setWeeklyPlan(newPlan);
-    await savePlanDebounced(newPlan);
+    await Promise.all(promises);
   };
 
   const extendToTomorrow = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
-    if (!weeklyPlan || dayIndex >= weeklyPlan.days.length - 1) return;
+    if (!familyId) return;
+    setToastMessage("Prorrogando refeição para todos os membros...");
     
-    const currentRecipe = weeklyPlan.days[dayIndex].meals[mealIndex].courses[courseIndex].recipe;
-    if (!currentRecipe) return;
+    const promises = allMembers.map(async (member) => {
+      const weekId = plannerService.getWeekId(weekOffset);
+      let memberPlan = await plannerService.getWeeklyPlan(familyId, member.id, weekId);
+      if (!memberPlan || dayIndex >= memberPlan.days.length - 1) return;
+      
+      const currentRecipe = memberPlan.days[dayIndex].meals[mealIndex].courses[courseIndex].recipe;
+      if (!currentRecipe) return;
 
-    const newDays = [...weeklyPlan.days];
-    const nextMeals = [...newDays[dayIndex + 1].meals];
+      const newDays = [...memberPlan.days];
+      const nextMeals = [...newDays[dayIndex + 1].meals];
+      
+      if (nextMeals[mealIndex] && nextMeals[mealIndex].courses[courseIndex]) {
+        const nextCourses = [...nextMeals[mealIndex].courses];
+        nextCourses[courseIndex] = {
+          ...nextCourses[courseIndex],
+          recipe: currentRecipe,
+          prepMode: "batch"
+        };
+        nextMeals[mealIndex] = { ...nextMeals[mealIndex], courses: nextCourses };
+        newDays[dayIndex + 1] = { ...newDays[dayIndex + 1], meals: nextMeals };
+        
+        const newPlan = { ...memberPlan, days: newDays };
+        await plannerService.saveWeeklyPlan(newPlan);
+        
+        if (member.id === activeProfileId) {
+          setWeeklyPlan(newPlan);
+        }
+      }
+    });
     
-    // Tentamos encontrar o mesmo meal e course no dia seguinte
-    if (nextMeals[mealIndex] && nextMeals[mealIndex].courses[courseIndex]) {
-      const nextCourses = [...nextMeals[mealIndex].courses];
-      nextCourses[courseIndex] = {
-        ...nextCourses[courseIndex],
-        recipe: currentRecipe,
-        prepMode: "batch" // Assume-se que vai sobrar da receita feita hoje
-      };
-      nextMeals[mealIndex] = { ...nextMeals[mealIndex], courses: nextCourses };
-      newDays[dayIndex + 1] = { ...newDays[dayIndex + 1], meals: nextMeals };
-      
-      const newPlan = { ...weeklyPlan, days: newDays };
-      setWeeklyPlan(newPlan);
-      savePlanDebounced(newPlan);
-      
-      setToastMessage("Receita prorrogada para o dia seguinte!");
-      setTimeout(() => setToastMessage(null), 3000);
-    } else {
-      setToastMessage("Não há slot equivalente no dia seguinte!");
-      setTimeout(() => setToastMessage(null), 3000);
-    }
+    await Promise.all(promises);
+    setToastMessage("✅ Receita prorrogada para todos os membros!");
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const toggleLeftover = (dayIndex: number, mealIndex: number, courseIndex: number) => {
