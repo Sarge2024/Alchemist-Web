@@ -35,10 +35,11 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
   // EAN manual input
   const [manualEan, setManualEan] = useState("");
 
-  // Price and Volume
+  // Price, Volume and Image overrides
   const [productPrice, setProductPrice] = useState("");
   const [productVolume, setProductVolume] = useState("");
   const [productVolumeUnit, setProductVolumeUnit] = useState("g");
+  const [productImageUrl, setProductImageUrl] = useState("");
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -60,6 +61,7 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
       const result = await productService.getByBarcode(code);
       if (result.success && result.product) {
         setFoundProduct(result.product);
+        setProductImageUrl(result.product.image || "");
         setStep("found");
       } else {
         setManualBarcode(code);
@@ -140,6 +142,7 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
     if (foundProduct) {
       const finalProduct = {
         ...foundProduct,
+        image: productImageUrl.trim() || foundProduct.image,
         price: parseFloat(productPrice) || undefined,
         totalPackageSize: parseFloat(productVolume) || undefined,
         totalPackageUnit: productVolumeUnit
@@ -162,6 +165,7 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
         lipids: parseFloat(manualFat) || 0,
         portionSize: parseFloat(manualPortionSize) || 100,
         portionUnit: manualPortionUnit || "g",
+        imageUrl: productImageUrl.trim() || undefined,
         price: parseFloat(productPrice) || undefined,
         totalPackageSize: parseFloat(productVolume) || undefined,
         totalPackageUnit: productVolumeUnit
@@ -386,6 +390,11 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                 
                 <div className="space-y-4">
                   <div>
+                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">URL da Imagem (Opcional)</label>
+                    <input type="url" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)}
+                      placeholder="https://..." className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Preço Total Pago (R$)</label>
                     <input type="number" value={productPrice} onChange={(e) => setProductPrice(e.target.value)}
                       placeholder="Ex: 15.90" className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-lg outline-none focus:border-primary" />
@@ -483,6 +492,12 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                     <input type="text" value={manualBarcode} onChange={(e) => setManualBarcode(e.target.value.replace(/\D/g, ""))}
                       placeholder="EAN-13" maxLength={13} className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm font-mono outline-none focus:border-primary" />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">URL da Imagem</label>
+                  <input type="url" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)}
+                    placeholder="https://..." className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
                 </div>
 
                 <div className="border-t border-outline-variant/20 pt-3">
