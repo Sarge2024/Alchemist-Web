@@ -12,7 +12,7 @@ import FamilySection from "./components/FamilySection";
 import ConsumptionHistory from "./components/ConsumptionHistory";
 import { PlateScanner } from "./components/PlateScanner/PlateScanner";
 import { AnimatePresence, motion } from "motion/react";
-import { Check } from "lucide-react";
+import { Check, X, Share2 } from "lucide-react";
 import { userService } from "./services/userService";
 
 interface AppProps {
@@ -60,6 +60,28 @@ export default function App({ initialProfiles, familyId }: AppProps) {
     initialProfiles && initialProfiles.length > 0 ? initialProfiles[0].id : "p-elena"
   );
   const [notificationCount, setNotificationCount] = useState<number>(1);
+  const [sharedData, setSharedData] = useState<{title?: string, text?: string, url?: string} | null>(null);
+
+  // Check for Web Share Target incoming data
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/share') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const title = searchParams.get('title');
+      const text = searchParams.get('text');
+      const url = searchParams.get('url');
+
+      if (title || text || url) {
+        setSharedData({
+          title: title || undefined,
+          text: text || undefined,
+          url: url || undefined
+        });
+        
+        // Limpar a URL para não ficar /share?title=...
+        window.history.replaceState({}, document.title, "/");
+      }
+    }
+  }, []);
 
   const currentProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0];
 
@@ -221,6 +243,74 @@ export default function App({ initialProfiles, familyId }: AppProps) {
 
       {/* Mobile Bottom Navigation */}
       <BottomNav activeView={activeView} onViewChange={setActiveView} />
+
+      {/* Web Share Target Modal */}
+      <AnimatePresence>
+        {sharedData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-4 border-b border-outline-variant/30 flex items-center justify-between bg-surface">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-secondary/10 rounded-full text-secondary">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-serif font-bold text-primary">Conteúdo Recebido</h3>
+                </div>
+                <button
+                  onClick={() => setSharedData(null)}
+                  className="p-2 text-scientific-gray hover:bg-outline-variant/20 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <p className="font-sans text-xs text-scientific-gray">
+                  Você compartilhou dados de outro aplicativo para o Alchymist. No momento, esses dados estão sendo recebidos na tela de Share Target.
+                </p>
+                <div className="bg-surface-container rounded-lg p-4 space-y-3">
+                  {sharedData.title && (
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Título</span>
+                      <p className="font-sans text-sm font-semibold">{sharedData.title}</p>
+                    </div>
+                  )}
+                  {sharedData.text && (
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Texto</span>
+                      <p className="font-sans text-xs">{sharedData.text}</p>
+                    </div>
+                  )}
+                  {sharedData.url && (
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-primary tracking-wider mb-1">URL / Link</span>
+                      <a href={sharedData.url} target="_blank" rel="noopener noreferrer" className="font-sans text-xs text-secondary underline break-all">
+                        {sharedData.url}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-4 border-t border-outline-variant/30 bg-surface">
+                <button
+                  onClick={() => {
+                     setSharedData(null);
+                     setActiveView(ActiveView.RECIPES);
+                     triggerGlobalToast("A implementação de importação será feita futuramente.");
+                  }}
+                  className="w-full bg-primary text-white font-sans text-xs font-bold py-3 rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                >
+                  Ir para Receitas
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
