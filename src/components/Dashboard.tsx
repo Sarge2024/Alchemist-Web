@@ -626,10 +626,20 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
               </p>
 
               <div className="flex items-center justify-between mb-2">
-                <span className="font-sans font-bold text-3xl text-primary">{consumedPercentage}%</span>
-                <span className="font-sans text-xs text-scientific-gray">
-                  Sobrou: <strong className="text-secondary">{100 - consumedPercentage}%</strong> no prato
-                </span>
+                <div className="flex flex-col">
+                  <span className="font-sans font-bold text-3xl text-primary">{consumedPercentage}%</span>
+                  <span className="font-sans text-xs font-bold text-scientific-gray mt-1">
+                    Ingerido: <span className="text-primary">{Math.round((partialConsumptionMeal.nutrition?.calories || 0) * (consumedPercentage / 100))} kcal</span>
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="font-sans text-xs text-scientific-gray block">
+                    Sobrou: <strong className="text-secondary">{100 - consumedPercentage}%</strong> no prato
+                  </span>
+                  <span className="font-sans text-[10px] text-scientific-gray block mt-1">
+                    Desperdício: {Math.round((partialConsumptionMeal.nutrition?.calories || 0) * ((100 - consumedPercentage) / 100))} kcal
+                  </span>
+                </div>
               </div>
               
               <input 

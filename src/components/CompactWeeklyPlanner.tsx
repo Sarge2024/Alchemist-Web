@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion"; // Changed to framer-motion matching typical Vite setup
-import { Plus, X, Search, Clock, Flame, Coffee, Sparkles, ChevronLeft, ChevronRight, Sunrise, Sun, Moon } from "lucide-react";
+import { Plus, X, Search, Clock, Flame, Coffee, Sparkles, ChevronLeft, ChevronRight, Sunrise, Sun, Moon, Camera } from "lucide-react";
 import { Recipe, WeeklyPlan, Profile, IndustrialProduct } from "../types";
 import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
@@ -558,15 +558,24 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                   )
                 ) : (
                   <div className="space-y-4">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-scientific-gray absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={productSearch}
-                        onChange={(e) => setProductSearch(e.target.value)}
-                        placeholder="Buscar produto..."
-                        className="w-full pl-9 pr-4 py-2 bg-lab-white border border-outline-variant/40 rounded-xl text-sm outline-none focus:border-primary"
-                      />
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-scientific-gray absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="Buscar produto..."
+                          className="w-full pl-9 pr-4 py-2 bg-lab-white border border-outline-variant/40 rounded-xl text-sm outline-none focus:border-primary"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setProductScannerOpen(true)}
+                        className="px-4 py-2 bg-primary text-white rounded-xl font-sans text-xs font-bold hover:bg-primary/95 transition-all flex items-center gap-1.5 focus:outline-none"
+                      >
+                        <Camera className="w-4 h-4" />
+                        CADASTRAR
+                      </button>
                     </div>
                     {loadingProducts ? (
                       <p className="text-center text-xs text-scientific-gray py-4">Buscando...</p>
@@ -594,6 +603,28 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sub-modal do Scanner */}
+      <AnimatePresence>
+        {productScannerOpen && (
+          <Suspense fallback={
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl p-6 text-center">
+                <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="font-sans text-xs text-scientific-gray">Carregando câmera...</p>
+              </div>
+            </div>
+          }>
+            <ProductScanner
+              onProductRegistered={(prod) => {
+                setProductScannerOpen(false);
+                handleSelectProduct(prod);
+              }}
+              onClose={() => setProductScannerOpen(false)}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
     </div>
