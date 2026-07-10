@@ -9,7 +9,33 @@ import { productService } from "../services/productService";
 
 const ProductScanner = lazy(() => import("./ProductScanner"));
 
+const isAlcoholicRecipe = (recipe: Recipe): boolean => {
+  const title = recipe.title.toLowerCase();
+  const description = (recipe.description || '').toLowerCase();
+  
+  const alcoholTerms = [
+    'alcoólico', 'alcoólica', 'alcoolico', 'alcoolica', 'alcohol', 'beer', 'cerveja', 
+    'vinho', 'wine', 'gin', 'vodka', 'whisky', 'whiskey', 'rum', 'cachaça', 
+    'caipirinha', 'mimosa', 'margarita', 'mojito', 'coquetel', 'cocktail', 
+    'chopp', 'champagne', 'champanhe', 'prosecco', 'licor', 'sake', 'saquê',
+    'tequila', 'brandy', 'conhaque', 'campari', 'martini', 'aperol'
+  ];
+  
+  const matchesText = alcoholTerms.some(t => title.includes(t) || description.includes(t));
+  
+  let matchesIngredient = false;
+  if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
+    matchesIngredient = recipe.ingredients.some(ing => {
+      const ingName = (typeof ing === 'string' ? ing : ing.name || '').toLowerCase();
+      return ['cachaça', 'vodka', 'rum', 'gin', 'whisky', 'whiskey', 'vinho', 'cerveja', 'licor', 'tequila', 'champagne', 'champanhe', 'sake', 'saquê', 'prosecco', 'conhaque', 'brandy', 'campari', 'martini', 'aperol', 'álcool'].some(alc => ingName.includes(alc));
+    });
+  }
+  
+  return matchesText || matchesIngredient;
+};
+
 interface WeeklyPlannerProps {
+  key?: string;
   familyId: string | null;
   activeProfileId: string | null;
 }
@@ -41,8 +67,20 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
 
   useEffect(() => {
     async function loadData() {
-      if (!familyId || !activeProfileId) return;
+      if (!familyId || !activeProfileId) {
+        setWeeklyPlan(null);
+        setActiveProfile(null);
+        setAllMembers([]);
+        setAvailableRecipes([]);
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
+      setWeeklyPlan(null);
+      setActiveProfile(null);
+      setAllMembers([]);
+      
       try {
         const weekId = plannerService.getWeekId(weekOffset);
         let plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
@@ -889,9 +927,18 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                           const rawMom = (recipe as any).momento;
                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
-                          const isExactMealMatch = m.includes(currentPeriod);
+                          const normalizedPeriods = currentPeriod === "Café da Tarde" 
+                            ? ["Café da Tarde", "Lanche / Chá da Tarde", "Lanche"] 
+                            : [currentPeriod];
+                          const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
+                          
+                          // Evitar bebidas alcoólicas no Café da Manhã, Café da Tarde e Ceia
+                          const isNonAlcoholicPeriod = ["Café da Manhã", "Café da Tarde", "Ceia"].includes(currentPeriod);
+                          if (isNonAlcoholicPeriod && isAlcoholicRecipe(recipe)) {
+                            return false;
+                          }
                           const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
                           const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
@@ -902,7 +949,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                             case "Sobremesa": 
                               return isDessert;
                             case "Bebida": 
-                              return isDrink;
+                              return isDrink && isExactMealMatch;
                             case "Lanche": 
                               return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
                             case "Prato Principal": 

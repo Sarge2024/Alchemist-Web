@@ -11,6 +11,7 @@ import { userService } from "../services/userService";
 import { ShoppingItem, Profile } from "../types";
 
 interface RecipeListProps {
+  key?: string;
   familyId?: string | null;
   activeProfileId?: string | null;
 }
@@ -103,7 +104,18 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
   // Carrega o perfil do usuário para buscar receitas aprovadas
   useEffect(() => {
     async function loadProfile() {
-      if (familyId && activeProfileId) {
+      if (!familyId || !activeProfileId) {
+        setActiveProfile(null);
+        setApprovedRecipes([]);
+        setRecipePeriodSelections({});
+        return;
+      }
+      
+      setActiveProfile(null);
+      setApprovedRecipes([]);
+      setRecipePeriodSelections({});
+      
+      try {
         const members = await userService.getFamilyMembers(familyId);
         const currentProf = members.find(p => p.id === activeProfileId);
         if (currentProf) {
@@ -112,6 +124,8 @@ export default function RecipeList({ familyId, activeProfileId }: RecipeListProp
             setApprovedRecipes(currentProf.approvedRecipes);
           }
         }
+      } catch (err) {
+        console.error("Erro ao carregar perfil para receitas:", err);
       }
     }
     loadProfile();

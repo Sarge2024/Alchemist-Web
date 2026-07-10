@@ -6,6 +6,7 @@ import { shoppingService } from "../services/shoppingService";
 import { plannerService } from "../services/plannerService";
 
 interface ShoppingListProps {
+  key?: string;
   familyId: string | null;
   activeProfileId: string | null;
 }
@@ -20,8 +21,15 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
 
   useEffect(() => {
     async function loadData() {
-      if (!familyId) return;
+      if (!familyId) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
+      setItems([]);
+      
       try {
         const list = await shoppingService.getShoppingList(familyId);
         setItems(list?.items || []);

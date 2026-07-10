@@ -111,10 +111,13 @@ export default function App({ initialProfiles, familyId }: AppProps) {
   };
 
   const renderActiveView = () => {
+    const viewKey = `${effectiveFamilyId}-${activeProfileId}`;
+
     switch (activeView) {
       case ActiveView.DASHBOARD:
         return (
           <Dashboard
+            key={viewKey}
             currentProfile={currentProfile}
             profiles={profiles}
             onSelectActiveProfile={setActiveProfileId}
@@ -144,11 +147,13 @@ export default function App({ initialProfiles, familyId }: AppProps) {
             </div>
             {plannerViewMode === 'compact' ? (
               <CompactWeeklyPlanner 
+                key={viewKey}
                 familyId={effectiveFamilyId}
                 activeProfileId={activeProfileId}
               />
             ) : (
               <WeeklyPlanner 
+                key={viewKey}
                 familyId={effectiveFamilyId}
                 activeProfileId={activeProfileId}
               />
@@ -158,6 +163,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.RECIPES:
         return (
           <RecipeList 
+            key={viewKey}
             familyId={effectiveFamilyId} 
             activeProfileId={activeProfileId} 
           />
@@ -165,6 +171,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.SHOPPING:
         return (
           <ShoppingList 
+            key={viewKey}
             familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
           />
@@ -172,6 +179,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.FAMILY:
         return (
           <FamilySection
+            key={viewKey}
             profiles={profiles}
             onProfilesChange={handleProfilesChange}
             activeProfileId={activeProfileId}
@@ -182,6 +190,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.HISTORY:
         return (
           <ConsumptionHistory 
+            key={viewKey}
             familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
           />
@@ -189,7 +198,17 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.SCANNER:
         return <ScannerTab />;
       default:
-        return <Dashboard currentProfile={currentProfile} profiles={profiles} onSelectActiveProfile={setActiveProfileId} onNavigateToView={setActiveView} familyId={effectiveFamilyId} activeProfileId={activeProfileId} />;
+        return (
+          <Dashboard 
+            key={viewKey}
+            currentProfile={currentProfile} 
+            profiles={profiles} 
+            onSelectActiveProfile={setActiveProfileId} 
+            onNavigateToView={setActiveView} 
+            familyId={effectiveFamilyId} 
+            activeProfileId={activeProfileId} 
+          />
+        );
     }
   };
 

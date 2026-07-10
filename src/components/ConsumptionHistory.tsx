@@ -5,6 +5,7 @@ import { LogEntry, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
 
 interface ConsumptionHistoryProps {
+  key?: string;
   familyId: string | null;
   activeProfileId: string | null;
 }
@@ -33,8 +34,16 @@ export default function ConsumptionHistory({ familyId, activeProfileId }: Consum
 
   useEffect(() => {
     async function loadData() {
-      if (!familyId || !activeProfileId) return;
+      if (!familyId || !activeProfileId) {
+        setEntries([]);
+        setLogDocId("");
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
+      setEntries([]);
+      
       try {
         const dateId = consumptionService.formatDateId(currentDate);
         setLogDocId(dateId);

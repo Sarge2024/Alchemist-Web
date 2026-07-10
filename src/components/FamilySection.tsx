@@ -5,6 +5,7 @@ import { Profile, Invite, Role } from "../types";
 import { dietaryAssessmentService, DietaryAssessmentResult } from "../services/dietaryAssessmentService";
 
 interface FamilySectionProps {
+  key?: string;
   profiles: Profile[];
   onProfilesChange: (updated: Profile[]) => void;
   activeProfileId: string;

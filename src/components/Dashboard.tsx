@@ -6,6 +6,7 @@ import { consumptionService } from "../services/consumptionService";
 import { plannerService } from "../services/plannerService";
 
 interface DashboardProps {
+  key?: string;
   currentProfile: Profile;
   profiles?: Profile[];
   familyId: string | null;
@@ -32,11 +33,21 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   const [consumedPercentage, setConsumedPercentage] = useState<number>(100);
   
   const [todayMeals, setTodayMeals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboardData() {
-      if (!familyId || !activeProfileId) return;
+      if (!familyId || !activeProfileId) {
+        setPlannedMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+        setActualMacros({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+        setPlannedFiber(0);
+        setActualFiber(0);
+        setTodayMeals([]);
+        setLoading(false);
+        return;
+      }
       
+      setLoading(true);
       const dateId = consumptionService.formatDateId(new Date());
       const weekId = plannerService.getCurrentWeekId();
       
@@ -119,6 +130,8 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
 
       } catch (e) {
         console.error("Erro ao carregar dashboard:", e);
+      } finally {
+        setLoading(false);
       }
     }
     loadDashboardData();
@@ -220,6 +233,14 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     fat: getPcts(actualMacros.fat, plannedMacros.fat, goalFat),
     fiber: getPcts(actualFiber, plannedFiber, goalFiber)
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   // CMR Calculations
   const consumedMealsCount = todayMeals.filter(m => m.status === 'CONSUMED_AS_PLANNED' || m.status === 'SUBSTITUTED').length;
