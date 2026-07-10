@@ -154,11 +154,13 @@ export interface LogEntry {
   foodName: string;
   category: "Planejado" | "Ocasional";
   details: string;
-  calories: number;
+  calories: number; // Calorias consumidas (faturadas)
   protein: number;
   carbs: number;
   fat: number;
-  cost?: number; // Custo associado ao consumo dessa refeição
+  cost?: number; // Custo financeiro consumido
+  consumedPercentage?: number; // Porcentagem do que foi efetivamente consumido (0 a 100)
+  wasteCost?: number; // Custo financeiro do que sobrou no prato (Resto-Ingestão)
   status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING";
   plannedMealRef?: string; // Reference to the course/meal in the WeeklyPlan
 }

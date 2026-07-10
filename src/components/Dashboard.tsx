@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight, Activity } from "lucide-react";
+import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight, Activity, X } from "lucide-react";
 import { Profile, Recipe, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
 import { plannerService } from "../services/plannerService";
@@ -24,6 +24,12 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   // For Fiber and Hydration (mocks for now as they are not in the profile)
   const [plannedFiber, setPlannedFiber] = useState(0);
   const [actualFiber, setActualFiber] = useState(0);
+  
+  const [activeProfile, setActiveProfile] = useState<any>(null);
+  
+  // Partial Consumption (Resto-Ingestão)
+  const [partialConsumptionMeal, setPartialConsumptionMeal] = useState<any | null>(null);
+  const [consumedPercentage, setConsumedPercentage] = useState<number>(100);
   
   const [todayMeals, setTodayMeals] = useState<any[]>([]);
 
@@ -118,7 +124,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     loadDashboardData();
   }, [familyId, activeProfileId]);
 
-  const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING") => {
+  const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING", pct: number = 100) => {
     // Optimistic UI update
     setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, status } : m));
     
@@ -138,21 +144,29 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         // Remove existing entry if any
         logDoc.entries = logDoc.entries.filter(e => e.plannedMealRef !== mealId);
         
-        // Add new entry
-        logDoc.entries.push({
-          id: `entry-${Date.now()}`,
+        const pctDecimal = pct / 100;
+        
+        const logEntryCost = meal.estimatedCost ? (meal.estimatedCost * pctDecimal) : 0;
+        const wasteCostVal = meal.estimatedCost ? (meal.estimatedCost - logEntryCost) : 0;
+
+        const newEntry: any = {
+          id: meal.id,
           time: meal.time,
           foodName: meal.name,
           category: "Planejado",
-          status,
-          plannedMealRef: meal.id,
-          calories: meal.nutrition.calories,
-          protein: meal.nutrition.protein,
-          carbs: meal.nutrition.carbs,
-          fat: meal.nutrition.fat,
-          cost: meal.estimatedCost,
-          details: ""
-        });
+          calories: Math.round(meal.nutrition.calories * pctDecimal),
+          protein: meal.nutrition.protein * pctDecimal,
+          carbs: meal.nutrition.carbs * pctDecimal,
+          fat: meal.nutrition.fat * pctDecimal,
+          cost: logEntryCost,
+          consumedPercentage: pct,
+          wasteCost: wasteCostVal,
+          details: "",
+          status: status,
+          plannedMealRef: mealId
+        };
+        
+        logDoc.entries.push(newEntry);
         
         await consumptionService.saveDayLogs(logDoc);
         
@@ -219,6 +233,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   const isCmrGood = cmr <= 15.0; // Benchmark for good cost
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
@@ -442,11 +457,18 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                       
                       <div className="flex gap-1.5 mt-1">
                         <button
-                          onClick={() => toggleMeal(meal.id, meal.status === "CONSUMED_AS_PLANNED" ? "PENDING" : "CONSUMED_AS_PLANNED")}
+                          onClick={() => {
+                            if (meal.status === "CONSUMED_AS_PLANNED") {
+                              toggleMeal(meal.id, "PENDING");
+                            } else {
+                              setPartialConsumptionMeal(meal);
+                              setConsumedPercentage(100);
+                            }
+                          }}
                           className={`p-1 rounded-md transition-colors ${
                             meal.status === "CONSUMED_AS_PLANNED" ? "bg-primary text-white" : "bg-white text-primary border border-primary/20 hover:bg-primary/5"
                           }`}
-                          title="Consumido como Planejado"
+                          title="Confirmar Consumo (Abre Opções)"
                         >
                            <CheckCircle2 className="w-4 h-4" />
                         </button>
@@ -564,5 +586,91 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         </div>
       </div>
     </motion.div>
+    
+    {/* Partial Consumption Modal */}
+    <AnimatePresence>
+      {partialConsumptionMeal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-surface rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col"
+          >
+            <div className="p-4 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-low">
+              <h3 className="font-serif text-lg font-bold text-primary">Confirmação de Consumo</h3>
+              <button
+                onClick={() => setPartialConsumptionMeal(null)}
+                className="p-1 rounded-full text-on-surface-variant hover:bg-on-surface/5 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 flex-1 overflow-y-auto">
+              <div className="flex items-center gap-3 mb-6 p-3 bg-primary/5 rounded-xl border border-primary/10">
+                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                  <img src={partialConsumptionMeal.image} alt="Refeição" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h4 className="font-sans text-sm font-bold text-primary">{partialConsumptionMeal.name}</h4>
+                  <p className="font-sans text-[10px] text-scientific-gray uppercase tracking-widest">{partialConsumptionMeal.time}</p>
+                </div>
+              </div>
+
+              <label className="block font-sans text-sm font-semibold text-on-surface mb-2">
+                O quanto você consumiu desta refeição?
+              </label>
+              <p className="text-xs text-scientific-gray mb-4 font-sans leading-relaxed">
+                Deslize para informar o valor exato ingerido. O que sobrar (Resto-Ingestão) será contabilizado no desperdício de caixa (UAN).
+              </p>
+
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-sans font-bold text-3xl text-primary">{consumedPercentage}%</span>
+                <span className="font-sans text-xs text-scientific-gray">
+                  Sobrou: <strong className="text-secondary">{100 - consumedPercentage}%</strong> no prato
+                </span>
+              </div>
+              
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                step="5"
+                value={consumedPercentage}
+                onChange={(e) => setConsumedPercentage(parseInt(e.target.value))}
+                className="w-full h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary mb-6"
+              />
+              
+              <div className="flex justify-between gap-2 mb-2">
+                <button onClick={() => setConsumedPercentage(25)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">25%</button>
+                <button onClick={() => setConsumedPercentage(50)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">50%</button>
+                <button onClick={() => setConsumedPercentage(75)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">75%</button>
+                <button onClick={() => setConsumedPercentage(100)} className="flex-1 py-1.5 rounded-lg border border-primary/30 text-xs font-sans font-bold text-primary bg-primary/5 hover:bg-primary/10 transition-colors">100%</button>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-outline-variant/30 flex justify-end gap-3 bg-surface-container-low">
+              <button
+                onClick={() => setPartialConsumptionMeal(null)}
+                className="px-4 py-2 rounded-lg font-sans text-sm font-semibold text-on-surface-variant hover:bg-on-surface/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  toggleMeal(partialConsumptionMeal.id, consumedPercentage > 0 ? "CONSUMED_AS_PLANNED" : "SKIPPED", consumedPercentage);
+                  setPartialConsumptionMeal(null);
+                }}
+                className="px-6 py-2 rounded-lg font-sans text-sm font-bold text-white bg-primary hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                Salvar Consumo
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
