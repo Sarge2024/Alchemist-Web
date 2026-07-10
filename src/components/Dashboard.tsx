@@ -15,7 +15,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ currentProfile, profiles, familyId, activeProfileId, onNavigateToView, onSelectActiveProfile }: DashboardProps) {
-  const [pendingApproval, setPendingApproval] = useState<string | null>("Elena R.");
+  const [pendingApproval, setPendingApproval] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   const [plannedMacros, setPlannedMacros] = useState({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
