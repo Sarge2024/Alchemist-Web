@@ -471,26 +471,38 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           if (!targetSlot || !weeklyPlan) return true;
                           const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
                           
+                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                          
                           const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
                           const rawMom = (recipe as any).momento;
                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
+                          const isExactMealMatch = m.includes(currentPeriod);
+                          
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
-                          const isDessert = p.includes("Doces e Sobremesas");
+                          const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
                           const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {
-                            case "Entrada": return isStarter || isSnack;
-                            case "Sobremesa": return isDessert;
-                            case "Bebida": return isDrink;
-                            case "Lanche": return isSnack || isDessert || p.includes("Massas e Risotos");
-                            case "Prato Principal": if (isDrink || isDessert || m.includes("Entradas") || p.includes("Bebidas")) return false; return true;
+                            case "Entrada": 
+                              return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
+                            case "Sobremesa": 
+                              return isDessert;
+                            case "Bebida": 
+                              return isDrink;
+                            case "Lanche": 
+                              return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
+                            case "Prato Principal": 
+                              if (isDrink || isDessert || isStarter || isSnack) {
+                                if (isExactMealMatch && !isDrink && !isDessert) return true;
+                                return false;
+                              }
+                              return true;
                             default: return true;
                           }
                         });
 
-                        const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
                         
                         // Sort so approved recipes appear first
                         filteredRecipes.sort((a, b) => {
