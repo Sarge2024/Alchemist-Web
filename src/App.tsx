@@ -10,7 +10,7 @@ import RecipeList from "./components/RecipeList";
 import ShoppingList from "./components/ShoppingList";
 import FamilySection from "./components/FamilySection";
 import ConsumptionHistory from "./components/ConsumptionHistory";
-import { PlateScanner } from "./components/PlateScanner/PlateScanner";
+import { ScannerTab } from "./components/ScannerTab";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, X, Share2, Loader2 } from "lucide-react";
 import { userService } from "./services/userService";
@@ -187,7 +187,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
           />
         );
       case ActiveView.SCANNER:
-        return <PlateScanner />;
+        return <ScannerTab />;
       default:
         return <Dashboard currentProfile={currentProfile} profiles={profiles} onSelectActiveProfile={setActiveProfileId} onNavigateToView={setActiveView} familyId={effectiveFamilyId} activeProfileId={activeProfileId} />;
     }
