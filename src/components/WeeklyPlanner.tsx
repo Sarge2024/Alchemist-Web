@@ -926,57 +926,86 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
 
                          let filteredRecipes = availableRecipes.filter(recipe => {
-                           const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
-                           const rawMom = (recipe as any).momento;
-                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
-                           
-                           const normalizedPeriods = (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia")
-                             ? ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"]
-                             : (currentPeriod === "Almoço" || currentPeriod === "Jantar")
-                               ? ["Almoço", "Jantar", "Almoço / Jantar"]
-                               : [currentPeriod];
-                           const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
-                           
-                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
-                           
-                           // Evitar bebidas alcoólicas no Café da Manhã, Café da Tarde e Ceia
-                           const isNonAlcoholicPeriod = ["Café da Manhã", "Café da Tarde", "Ceia"].includes(currentPeriod);
-                           if (isNonAlcoholicPeriod && isAlcoholicRecipe(recipe)) {
-                             return false;
-                           }
-                           const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
-                           const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia") || m.includes("Lanche") || m.includes("Lanche da Tarde");
-                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
+                            const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
+                            const rawMom = (recipe as any).momento;
+                            const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
+                            
+                            let normalizedPeriods = [currentPeriod];
+                            if (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia") {
+                              normalizedPeriods = ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"];
+                            } else if (currentPeriod === "Almoço") {
+                              normalizedPeriods = ["Almoço", "Almoço / Jantar"];
+                            } else if (currentPeriod === "Jantar") {
+                              normalizedPeriods = ["Jantar", "Almoço / Jantar"];
+                            }
+                            
+                            const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
+                            
+                            // STRICT FILTER: If the recipe has meal periods assigned, but none match the current period, exclude it.
+                            const mealPeriods = ["Café da Manhã", "Almoço", "Café da Tarde", "Jantar", "Ceia", "Almoço / Jantar", "Lanche / Chá da Tarde", "Lanche da Tarde", "Lanche"];
+                            const recipeMealPeriods = m.filter(val => mealPeriods.includes(val));
+                            if (recipeMealPeriods.length > 0 && !isExactMealMatch) {
+                              return false;
+                            }
+                            
+                            const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
+                            
+                            // Evitar bebidas alcoólicas no Café da Manhã, Café da Tarde e Ceia
+                            const isNonAlcoholicPeriod = ["Café da Manhã", "Café da Tarde", "Ceia"].includes(currentPeriod);
+                            if (isNonAlcoholicPeriod && isAlcoholicRecipe(recipe)) {
+                              return false;
+                            }
+                            const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
+                            const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia") || m.includes("Lanche") || m.includes("Lanche da Tarde");
+                            const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
-                           switch (courseType) {
-                             case "Entrada": 
-                               return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
-                             case "Sobremesa": 
-                               return isDessert;
-                             case "Bebida": 
-                               return isDrink;
-                             case "Lanche": 
-                               return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
-                             case "Prato Principal": 
-                               if (isDrink || isDessert || isStarter || isSnack) {
-                                 if (isExactMealMatch && !isDrink && !isDessert) return true;
-                                 return false;
-                               }
-                               return true;
-                             default: return true;
-                           }
+                            switch (courseType) {
+                              case "Entrada": 
+                                return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
+                              case "Sobremesa": 
+                                return isDessert;
+                              case "Bebida": 
+                                return isDrink;
+                              case "Lanche": 
+                                return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
+                              case "Prato Principal": 
+                                if (isDrink || isDessert || isStarter || isSnack) {
+                                  if (isExactMealMatch && !isDrink && !isDessert) return true;
+                                  return false;
+                                }
+                                return true;
+                              default: return true;
+                            }
+                          });
+
+                         // Sort so approved recipes appear first (prioritizing exact period match)
+                         filteredRecipes.sort((a, b) => {
+                           const getWeight = (recipe: Recipe) => {
+                             const entries = activeProfile?.approvedRecipes?.filter(r => r.recipeId === recipe.id) || [];
+                             
+                             const rawMom = (recipe as any).momento;
+                             const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
+                             let normalizedPeriods = [currentPeriod];
+                             if (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia") {
+                               normalizedPeriods = ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"];
+                             } else if (currentPeriod === "Almoço") {
+                               normalizedPeriods = ["Almoço", "Almoço / Jantar"];
+                             } else if (currentPeriod === "Jantar") {
+                               normalizedPeriods = ["Jantar", "Almoço / Jantar"];
+                             }
+                             const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
+                             
+                             const isApprovedExact = entries.some(r => r.period === currentPeriod);
+                             const isApprovedAny = entries.length > 0;
+                             
+                             if (isApprovedExact) return 4;
+                             if (isExactMealMatch && isApprovedAny) return 3;
+                             if (isExactMealMatch) return 2;
+                             if (isApprovedAny) return 1;
+                             return 0;
+                           };
+                           return getWeight(b) - getWeight(a);
                          });
-
-                        // Sort so approved recipes appear first (prioritizing exact period match)
-                        filteredRecipes.sort((a, b) => {
-                          const getWeight = (recipe: Recipe) => {
-                            const entries = activeProfile?.approvedRecipes?.filter(r => r.recipeId === recipe.id) || [];
-                            if (entries.some(r => r.period === currentPeriod)) return 2;
-                            if (entries.length > 0) return 1;
-                            return 0;
-                          };
-                          return getWeight(b) - getWeight(a);
-                        });
 
                         return (
                           <>

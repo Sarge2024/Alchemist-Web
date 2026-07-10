@@ -515,12 +515,23 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           const rawMom = (recipe as any).momento;
                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
-                          const normalizedPeriods = (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia")
-                            ? ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"]
-                            : (currentPeriod === "Almoço" || currentPeriod === "Jantar")
-                              ? ["Almoço", "Jantar", "Almoço / Jantar"]
-                              : [currentPeriod];
+                          let normalizedPeriods = [currentPeriod];
+                          if (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia") {
+                            normalizedPeriods = ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"];
+                          } else if (currentPeriod === "Almoço") {
+                            normalizedPeriods = ["Almoço", "Almoço / Jantar"];
+                          } else if (currentPeriod === "Jantar") {
+                            normalizedPeriods = ["Jantar", "Almoço / Jantar"];
+                          }
+                          
                           const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
+                          
+                          // STRICT FILTER: If the recipe has meal periods assigned, but none match the current period, exclude it.
+                          const mealPeriods = ["Café da Manhã", "Almoço", "Café da Tarde", "Jantar", "Ceia", "Almoço / Jantar", "Lanche / Chá da Tarde", "Lanche da Tarde", "Lanche"];
+                          const recipeMealPeriods = m.filter(val => mealPeriods.includes(val));
+                          if (recipeMealPeriods.length > 0 && !isExactMealMatch) {
+                            return false;
+                          }
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
                           
@@ -557,8 +568,26 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                         filteredRecipes.sort((a, b) => {
                           const getWeight = (recipe: Recipe) => {
                             const entries = activeProfile?.approvedRecipes?.filter(r => r.recipeId === recipe.id) || [];
-                            if (entries.some(r => r.period === currentPeriod)) return 2;
-                            if (entries.length > 0) return 1;
+                            
+                            const rawMom = (recipe as any).momento;
+                            const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
+                            let normalizedPeriods = [currentPeriod];
+                            if (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia") {
+                              normalizedPeriods = ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"];
+                            } else if (currentPeriod === "Almoço") {
+                              normalizedPeriods = ["Almoço", "Almoço / Jantar"];
+                            } else if (currentPeriod === "Jantar") {
+                              normalizedPeriods = ["Jantar", "Almoço / Jantar"];
+                            }
+                            const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
+                            
+                            const isApprovedExact = entries.some(r => r.period === currentPeriod);
+                            const isApprovedAny = entries.length > 0;
+                            
+                            if (isApprovedExact) return 4;
+                            if (isExactMealMatch && isApprovedAny) return 3;
+                            if (isExactMealMatch) return 2;
+                            if (isApprovedAny) return 1;
                             return 0;
                           };
                           return getWeight(b) - getWeight(a);
