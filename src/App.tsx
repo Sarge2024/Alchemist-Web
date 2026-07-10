@@ -92,6 +92,8 @@ export default function App({ initialProfiles, familyId }: AppProps) {
         return (
           <Dashboard
             currentProfile={currentProfile}
+            profiles={profiles}
+            onSelectActiveProfile={setActiveProfileId}
             onNavigateToView={(view) => setActiveView(view)}
             familyId={effectiveFamilyId}
             activeProfileId={activeProfileId}
@@ -163,7 +165,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
       case ActiveView.SCANNER:
         return <PlateScanner />;
       default:
-        return <Dashboard currentProfile={currentProfile} onNavigateToView={setActiveView} familyId={effectiveFamilyId} activeProfileId={activeProfileId} />;
+        return <Dashboard currentProfile={currentProfile} profiles={profiles} onSelectActiveProfile={setActiveProfileId} onNavigateToView={setActiveView} familyId={effectiveFamilyId} activeProfileId={activeProfileId} />;
     }
   };
 

@@ -3,14 +3,14 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { productService } from "../services/productService";
 import { IndustrialProduct } from "../types";
 import { motion, AnimatePresence } from "motion/react";
-import { Camera, X, Package, Loader2, AlertTriangle, Check, Keyboard } from "lucide-react";
+import { Camera, X, Package, Loader2, AlertTriangle, Check, Keyboard, ArrowRight } from "lucide-react";
 
 interface ProductScannerProps {
   onProductRegistered: (product: IndustrialProduct) => void;
   onClose: () => void;
 }
 
-type ScannerStep = "scanning" | "loading" | "found" | "not-found" | "manual" | "manual-ean";
+type ScannerStep = "scanning" | "loading" | "found" | "not-found" | "manual" | "manual-ean" | "price-input";
 
 export default function ProductScanner({ onProductRegistered, onClose }: ProductScannerProps) {
   const [step, setStep] = useState<ScannerStep>("scanning");
@@ -34,6 +34,11 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
 
   // EAN manual input
   const [manualEan, setManualEan] = useState("");
+
+  // Price and Volume
+  const [productPrice, setProductPrice] = useState("");
+  const [productVolume, setProductVolume] = useState("");
+  const [productVolumeUnit, setProductVolumeUnit] = useState("g");
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -127,7 +132,19 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
 
   const handleConfirmProduct = () => {
     if (foundProduct) {
-      onProductRegistered(foundProduct);
+      setStep("price-input");
+    }
+  };
+
+  const handleFinalConfirm = () => {
+    if (foundProduct) {
+      const finalProduct = {
+        ...foundProduct,
+        price: parseFloat(productPrice) || undefined,
+        totalPackageSize: parseFloat(productVolume) || undefined,
+        totalPackageUnit: productVolumeUnit
+      };
+      onProductRegistered(finalProduct);
     }
   };
 
@@ -145,6 +162,9 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
         lipids: parseFloat(manualFat) || 0,
         portionSize: parseFloat(manualPortionSize) || 100,
         portionUnit: manualPortionUnit || "g",
+        price: parseFloat(productPrice) || undefined,
+        totalPackageSize: parseFloat(productVolume) || undefined,
+        totalPackageUnit: productVolumeUnit
       });
       if (result.success && result.product) {
         onProductRegistered(result.product);
@@ -181,6 +201,7 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                step === "loading" ? "Buscando..." :
                step === "found" ? "Produto Encontrado" :
                step === "not-found" ? "Não Encontrado" :
+               step === "price-input" ? "Preço e Volume" :
                "Cadastro Manual"}
             </h3>
           </div>
@@ -346,8 +367,63 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                     onClick={handleConfirmProduct}
                     className="flex-1 py-2.5 bg-primary text-white rounded-lg font-sans text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5"
                   >
+                    Continuar
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========== STEP: PRICE INPUT ========== */}
+            {step === "price-input" && foundProduct && (
+              <motion.div key="price-input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-5">
+                <div className="text-center mb-5">
+                  <Package className="w-8 h-8 text-primary mx-auto mb-2" />
+                  <p className="font-sans text-sm text-scientific-gray">
+                    Quase lá! Insira o preço pago e o tamanho total da embalagem para calcularmos o custo da receita.
+                  </p>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Preço Total Pago (R$)</label>
+                    <input type="number" value={productPrice} onChange={(e) => setProductPrice(e.target.value)}
+                      placeholder="Ex: 15.90" className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-lg outline-none focus:border-primary" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Tamanho da Embalagem</label>
+                      <input type="number" value={productVolume} onChange={(e) => setProductVolume(e.target.value)}
+                        placeholder="Ex: 500" className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-lg outline-none focus:border-primary" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Unidade</label>
+                      <select value={productVolumeUnit} onChange={(e) => setProductVolumeUnit(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-lab-white border border-outline-variant/40 rounded-lg text-lg outline-none focus:border-primary">
+                        <option value="g">Gramas (g)</option>
+                        <option value="ml">Mililitros (ml)</option>
+                        <option value="kg">Quilogramas (kg)</option>
+                        <option value="l">Litros (l)</option>
+                        <option value="unid">Unidades</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setStep("found")}
+                    className="flex-1 py-2.5 border border-outline-variant/40 text-scientific-gray rounded-lg font-sans text-xs font-bold hover:bg-lab-white transition-all"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    onClick={handleFinalConfirm}
+                    className="flex-1 py-2.5 bg-primary text-white rounded-lg font-sans text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5"
+                  >
                     <Check className="w-4 h-4" />
-                    Confirmar
+                    Finalizar Cadastro
                   </button>
                 </div>
               </motion.div>
@@ -449,6 +525,28 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                       <option value="g">Gramas (g)</option>
                       <option value="ml">Mililitros (ml)</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Preço Total Pago (R$)</label>
+                    <input type="number" value={productPrice} onChange={(e) => setProductPrice(e.target.value)}
+                      placeholder="0.00" className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Tamanho da Embalagem</label>
+                    <div className="flex gap-1">
+                      <input type="number" value={productVolume} onChange={(e) => setProductVolume(e.target.value)}
+                        placeholder="Ex: 500" className="w-2/3 px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
+                      <select value={productVolumeUnit} onChange={(e) => setProductVolumeUnit(e.target.value)}
+                        className="w-1/3 px-1 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary">
+                        <option value="g">g</option>
+                        <option value="ml">ml</option>
+                        <option value="kg">kg</option>
+                        <option value="l">l</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

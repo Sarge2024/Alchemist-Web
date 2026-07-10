@@ -112,6 +112,10 @@ export default function ConsumptionHistory({ familyId, activeProfileId }: Consum
       category: "Ocasional",
       details: `${loggedQuantity} ${loggedUnit} • Registro de Consumo Eventual`,
       calories: calculatedCal,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      status: "CONSUMED_AS_PLANNED"
     };
 
     const newEntries = [newLog, ...entries];

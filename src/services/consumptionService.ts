@@ -32,17 +32,29 @@ export const consumptionService = {
       
       // Recalcula totais antes de salvar
       let calories = 0;
+      let protein = 0;
+      let carbs = 0;
+      let fat = 0;
+      let cost = 0;
+      
       logDoc.entries.forEach(entry => {
-        calories += entry.calories;
+        // Ignora calorias e macros de itens pulados
+        if (entry.status !== "SKIPPED") {
+          calories += entry.calories || 0;
+          protein += entry.protein || 0;
+          carbs += entry.carbs || 0;
+          fat += entry.fat || 0;
+          cost += entry.cost || 0;
+        }
       });
       
       const docToSave = {
         ...logDoc,
         totalCalories: calories,
-        // Macros podem ser incrementados no futuro
-        totalProtein: 0,
-        totalCarbs: 0,
-        totalFat: 0
+        totalProtein: protein,
+        totalCarbs: carbs,
+        totalFat: fat,
+        totalCost: cost
       };
       
       await setDoc(logRef, docToSave);
@@ -62,7 +74,8 @@ export const consumptionService = {
       totalCalories: 0,
       totalProtein: 0,
       totalCarbs: 0,
-      totalFat: 0
+      totalFat: 0,
+      totalCost: 0
     };
   }
 };

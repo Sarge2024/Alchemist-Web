@@ -23,7 +23,44 @@ export default function FamilySection({
   
   // Member profile we are currently editing
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [activeTab, setActiveTab] = useState<"biometrics" | "clinical" | "habits">("biometrics");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const calculateTDEE = (profile: Profile) => {
+    if (!profile.weight || !profile.height || !profile.age || !profile.gender) {
+      return profile.dailyCalories || 2000;
+    }
+
+    let bmr = 0;
+    if (profile.gender === "male") {
+      bmr = 88.362 + (13.397 * profile.weight) + (4.799 * profile.height) - (5.677 * profile.age);
+    } else {
+      bmr = 447.593 + (9.247 * profile.weight) + (3.098 * profile.height) - (4.330 * profile.age);
+    }
+
+    const activityMultipliers = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9
+    };
+    
+    const level = profile.activityLevel || "moderate";
+    let tdee = bmr * (activityMultipliers[level] || 1.55);
+
+    if (profile.dietGoal === "weight_loss") tdee -= 500;
+    if (profile.dietGoal === "muscle_gain") tdee += 500;
+
+    return Math.round(tdee);
+  };
+
+  const updateBiometrics = (updates: Partial<Profile>) => {
+    if (!editingProfile) return;
+    const updated = { ...editingProfile, ...updates };
+    const newKcal = calculateTDEE(updated);
+    setEditingProfile({ ...updated, dailyCalories: newKcal });
+  };
 
   const [newDependentName, setNewDependentName] = useState("");
   const [newDependentEmail, setNewDependentEmail] = useState("");
@@ -474,213 +511,335 @@ export default function FamilySection({
 
             {/* Right configuration panel (Diet, Allergies, Targets) */}
             <div className="lg:col-span-8 space-y-6">
-              {/* Allergies and diet presets */}
-              <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
-                <div>
-                  <h4 className="font-serif text-md font-bold text-primary">Alergias e Protocolos Alimentares</h4>
-                  <p className="font-sans text-xs text-scientific-gray mt-1">
-                    Defina intolerâncias e padrões metabólicos prioritários.
-                  </p>
-                </div>
-
-                {/* Dietary Protocols Preset selection */}
-                <div className="space-y-3">
-                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
-                    Protocolos Alimentares Escolhidos
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {availableProtocols.map((protocol) => {
-                      const isSelected = editingProfile.dietaryProtocol.includes(protocol);
-                      return (
-                        <button
-                          key={protocol}
-                          type="button"
-                          onClick={() => handleProtocolToggle(protocol)}
-                          className={`px-3 py-1.5 rounded-full font-sans text-xs font-semibold border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-secondary text-white border-secondary"
-                              : "bg-sage-wash/40 text-primary border-outline-variant/40 hover:bg-sage-wash"
-                          }`}
-                        >
-                          {protocol}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Allergies selection */}
-                <div className="space-y-3">
-                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
-                    Intolerâncias & Restrições Clínicas
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {availableAllergies.map((allergy) => {
-                      const isSelected = editingProfile.allergies.includes(allergy);
-                      return (
-                        <button
-                          key={allergy}
-                          type="button"
-                          onClick={() => handleAllergyToggle(allergy)}
-                          className={`px-3 py-1.5 rounded font-sans text-xs font-semibold border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-gold-leaf text-white border-gold-leaf shadow-sm"
-                              : "bg-surface text-primary border-outline-variant/40 hover:bg-sage-wash"
-                          }`}
-                        >
-                          {isSelected ? `Alergia: ${allergy}` : allergy}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Clinical description */}
-                <div className="space-y-2">
-                  <label className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
-                    Contexto Clínico (Medicamentos & Suplementos)
-                  </label>
-                  <textarea
-                    value={editingProfile.medications}
-                    onChange={(e) => setEditingProfile({ ...editingProfile, medications: e.target.value })}
-                    placeholder="Ex: Suplementação de Metilfolato 400mcg e Ômega-3 no café da manhã."
-                    rows={2}
-                    className="w-full p-3 bg-lab-white border border-outline-variant/40 rounded-lg outline-none font-sans text-xs text-primary placeholder:text-outline"
-                  />
-                </div>
+              {/* Tab Navigation */}
+              <div className="flex border-b border-outline-variant/40">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("biometrics")}
+                  className={`px-4 py-3 font-serif text-sm font-bold border-b-2 transition-colors cursor-pointer ${activeTab === "biometrics" ? "border-primary text-primary" : "border-transparent text-scientific-gray hover:text-primary"}`}
+                >
+                  🧬 Biometria & Metas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("clinical")}
+                  className={`px-4 py-3 font-serif text-sm font-bold border-b-2 transition-colors cursor-pointer ${activeTab === "clinical" ? "border-primary text-primary" : "border-transparent text-scientific-gray hover:text-primary"}`}
+                >
+                  🩺 Contexto Clínico
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("habits")}
+                  className={`px-4 py-3 font-serif text-sm font-bold border-b-2 transition-colors cursor-pointer ${activeTab === "habits" ? "border-primary text-primary" : "border-transparent text-scientific-gray hover:text-primary"}`}
+                >
+                  🍽️ Hábitos
+                </button>
               </div>
 
-              {/* Dynamic Targets & Macro slider calculations */}
-              <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
-                <div>
-                  <h4 className="font-serif text-md font-bold text-primary">Metas Nutricionais Dinâmicas</h4>
-                  <p className="font-sans text-xs text-scientific-gray mt-1">
-                    Ajuste o valor energético diário e os percentuais dos macronutrientes.
-                  </p>
-                </div>
-
-                {/* Calorie slider */}
-                <div className="space-y-3 bg-lab-white p-4 rounded-lg border border-outline-variant/10">
-                  <div className="flex justify-between items-center">
-                    <span className="font-sans text-xs font-bold text-primary uppercase tracking-wide">
-                      Ingestão Energética Diária
-                    </span>
-                    <span className="font-serif text-lg font-bold text-primary">
-                      {editingProfile.dailyCalories} <span className="text-xs text-scientific-gray">kcal</span>
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1200"
-                    max="4500"
-                    step="50"
-                    value={editingProfile.dailyCalories}
-                    onChange={(e) =>
-                      setEditingProfile({ ...editingProfile, dailyCalories: parseInt(e.target.value) })
-                    }
-                    className="w-full accent-primary cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-scientific-gray font-mono">
-                    <span>1.200 kcal</span>
-                    <span>Meta Neutra</span>
-                    <span>4.500 kcal</span>
-                  </div>
-                </div>
-
-                {/* Macro Percent inputs with Warning check */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center pb-2 border-b border-outline-variant/20">
-                    <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">
-                      Distribuição de Macronutrientes
-                    </span>
+              {/* TAB 1: BIOMETRICS & TARGETS */}
+              {activeTab === "biometrics" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
+                    <div>
+                      <h4 className="font-serif text-md font-bold text-primary">Biometria e Esforço Físico</h4>
+                      <p className="font-sans text-xs text-scientific-gray mt-1">
+                        Preencha os dados corporais para o cálculo automático do Índice Metabólico Basal (IMB).
+                      </p>
+                    </div>
                     
-                    {/* Sum check */}
-                    {editingProfile.proteinPercentage + editingProfile.carbsPercentage + editingProfile.fatPercentage === 100 ? (
-                      <span className="flex items-center gap-1 text-[10px] text-secondary font-sans font-bold bg-secondary-container/20 px-2 py-0.5 rounded">
-                        <Check className="w-3 h-3 stroke-[2.5]" /> Soma 100%
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[10px] text-gold-leaf font-sans font-bold bg-gold-leaf/10 px-2 py-0.5 rounded animate-pulse">
-                        <AlertCircle className="w-3 h-3" /> Diferença de {100 - (editingProfile.proteinPercentage + editingProfile.carbsPercentage + editingProfile.fatPercentage)}%
-                      </span>
-                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Idade</label>
+                        <input type="number" value={editingProfile.age || ""} onChange={e => updateBiometrics({ age: parseInt(e.target.value) || undefined })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold" />
+                      </div>
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Sexo</label>
+                        <select value={editingProfile.gender || ""} onChange={e => updateBiometrics({ gender: e.target.value as any })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold">
+                          <option value="">Selecione...</option>
+                          <option value="male">Masculino</option>
+                          <option value="female">Feminino</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Peso (kg)</label>
+                        <input type="number" value={editingProfile.weight || ""} onChange={e => updateBiometrics({ weight: parseFloat(e.target.value) || undefined })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold" />
+                      </div>
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Altura (cm)</label>
+                        <input type="number" value={editingProfile.height || ""} onChange={e => updateBiometrics({ height: parseInt(e.target.value) || undefined })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Nível de Atividade Física</label>
+                        <select value={editingProfile.activityLevel || "moderate"} onChange={e => updateBiometrics({ activityLevel: e.target.value as any })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold">
+                          <option value="sedentary">Sedentário (Pouco/Nenhum)</option>
+                          <option value="light">Leve (1-3 dias/semana)</option>
+                          <option value="moderate">Moderado (3-5 dias/semana)</option>
+                          <option value="active">Ativo (6-7 dias/semana)</option>
+                          <option value="very_active">Muito Ativo (2x ao dia)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-wider text-[10px]">Objetivo da Dieta</label>
+                        <select value={editingProfile.dietGoal || "maintenance"} onChange={e => updateBiometrics({ dietGoal: e.target.value as any })} className="w-full px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold">
+                          <option value="weight_loss">Perda de Peso (Déficit)</option>
+                          <option value="maintenance">Manutenção Normal</option>
+                          <option value="muscle_gain">Ganho de Massa Muscular (Superávit)</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-primary/5 border border-primary/20 rounded p-4 flex items-center justify-between">
+                       <div>
+                         <span className="block text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Cálculo de Energia (TDEE)</span>
+                         <span className="text-2xl font-serif font-bold text-primary">{editingProfile.dailyCalories} <span className="text-sm font-sans font-normal text-scientific-gray">kcal / dia</span></span>
+                       </div>
+                       <div className="text-right text-[10px] text-scientific-gray max-w-[150px]">
+                          Cálculo automático baseado no IMB de Harris-Benedict.
+                       </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans text-xs">
-                    {/* Protein percentage input */}
-                    <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
-                      <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
-                        Proteína (30% padrão)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          value={editingProfile.proteinPercentage}
-                          onChange={(e) =>
-                            setEditingProfile({
-                              ...editingProfile,
-                              proteinPercentage: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
-                        />
-                        <span className="font-semibold text-scientific-gray">%</span>
-                      </div>
-                      <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
-                        Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.proteinPercentage, "prot")}g
-                      </span>
+                  {/* Dynamic Targets & Macro slider calculations */}
+                  <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
+                    <div>
+                      <h4 className="font-serif text-md font-bold text-primary">Metas de Macronutrientes</h4>
+                      <p className="font-sans text-xs text-scientific-gray mt-1">
+                        Ajuste a distribuição calórica entre proteínas, carboidratos e gorduras.
+                      </p>
                     </div>
 
-                    {/* Carbs percentage input */}
-                    <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
-                      <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
-                        Carboidratos (45% padrão)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          value={editingProfile.carbsPercentage}
-                          onChange={(e) =>
-                            setEditingProfile({
-                              ...editingProfile,
-                              carbsPercentage: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
-                        />
-                        <span className="font-semibold text-scientific-gray">%</span>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center pb-2 border-b border-outline-variant/20">
+                        <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">
+                          Distribuição de Macronutrientes
+                        </span>
+                        
+                        {/* Sum check */}
+                        {editingProfile.proteinPercentage + editingProfile.carbsPercentage + editingProfile.fatPercentage === 100 ? (
+                          <span className="flex items-center gap-1 text-[10px] text-secondary font-sans font-bold bg-secondary-container/20 px-2 py-0.5 rounded">
+                            <Check className="w-3 h-3 stroke-[2.5]" /> Soma 100%
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[10px] text-gold-leaf font-sans font-bold bg-gold-leaf/10 px-2 py-0.5 rounded animate-pulse">
+                            <AlertCircle className="w-3 h-3" /> Diferença de {100 - (editingProfile.proteinPercentage + editingProfile.carbsPercentage + editingProfile.fatPercentage)}%
+                          </span>
+                        )}
                       </div>
-                      <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
-                        Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.carbsPercentage, "carb")}g
-                      </span>
-                    </div>
 
-                    {/* Fat percentage input */}
-                    <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
-                      <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
-                        Gorduras (25% padrão)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          value={editingProfile.fatPercentage}
-                          onChange={(e) =>
-                            setEditingProfile({
-                              ...editingProfile,
-                              fatPercentage: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
-                        />
-                        <span className="font-semibold text-scientific-gray">%</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans text-xs">
+                        {/* Protein percentage input */}
+                        <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
+                          <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
+                            Proteína (30% padrão)
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              value={editingProfile.proteinPercentage}
+                              onChange={(e) =>
+                                setEditingProfile({
+                                  ...editingProfile,
+                                  proteinPercentage: parseInt(e.target.value) || 0,
+                                })
+                              }
+                              className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
+                            />
+                            <span className="font-semibold text-scientific-gray">%</span>
+                          </div>
+                          <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
+                            Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.proteinPercentage, "prot")}g
+                          </span>
+                        </div>
+
+                        {/* Carbs percentage input */}
+                        <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
+                          <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
+                            Carboidratos (45% padrão)
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              value={editingProfile.carbsPercentage}
+                              onChange={(e) =>
+                                setEditingProfile({
+                                  ...editingProfile,
+                                  carbsPercentage: parseInt(e.target.value) || 0,
+                                })
+                              }
+                              className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
+                            />
+                            <span className="font-semibold text-scientific-gray">%</span>
+                          </div>
+                          <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
+                            Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.carbsPercentage, "carb")}g
+                          </span>
+                        </div>
+
+                        {/* Fat percentage input */}
+                        <div className="bg-sage-wash/40 p-3 rounded border border-outline-variant/10">
+                          <label className="block text-scientific-gray font-semibold mb-1 uppercase tracking-widest text-[9px]">
+                            Gorduras (25% padrão)
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              value={editingProfile.fatPercentage}
+                              onChange={(e) =>
+                                setEditingProfile({
+                                  ...editingProfile,
+                                  fatPercentage: parseInt(e.target.value) || 0,
+                                })
+                              }
+                              className="w-16 px-2 py-1 bg-white border border-outline-variant/40 rounded outline-none font-bold text-primary"
+                            />
+                            <span className="font-semibold text-scientific-gray">%</span>
+                          </div>
+                          <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
+                            Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.fatPercentage, "fat")}g
+                          </span>
+                        </div>
                       </div>
-                      <span className="block text-[10px] text-primary/80 font-mono mt-2 font-semibold">
-                        Grams: {getMacroGrams(editingProfile.dailyCalories, editingProfile.fatPercentage, "fat")}g
-                      </span>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* TAB 2: CLINICAL */}
+              {activeTab === "clinical" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
+                    <div>
+                      <h4 className="font-serif text-md font-bold text-primary">Contexto Clínico & Restrições</h4>
+                      <p className="font-sans text-xs text-scientific-gray mt-1">
+                        Defina intolerâncias, alergias e padrões alimentares.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Restrições e Protocolos
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {availableProtocols.map((protocol) => {
+                          const isSelected = editingProfile.dietaryProtocol.includes(protocol);
+                          return (
+                            <button
+                              key={protocol}
+                              type="button"
+                              onClick={() => handleProtocolToggle(protocol)}
+                              className={`px-3 py-1.5 rounded-full font-sans text-xs font-semibold border transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-secondary text-white border-secondary"
+                                  : "bg-sage-wash/40 text-primary border-outline-variant/40 hover:bg-sage-wash"
+                              }`}
+                            >
+                              {protocol}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Comorbidades e Condições
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {availableAllergies.map((allergy) => {
+                          const isSelected = editingProfile.allergies.includes(allergy);
+                          return (
+                            <button
+                              key={allergy}
+                              type="button"
+                              onClick={() => handleAllergyToggle(allergy)}
+                              className={`px-3 py-1.5 rounded font-sans text-xs font-semibold border transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-gold-leaf text-white border-gold-leaf shadow-sm"
+                                  : "bg-surface text-primary border-outline-variant/40 hover:bg-sage-wash"
+                              }`}
+                            >
+                              {isSelected ? `Alergia: ${allergy}` : allergy}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Agentes Alérgicos (Texto Livre)
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProfile.allergens || ""}
+                        onChange={(e) => setEditingProfile({ ...editingProfile, allergens: e.target.value })}
+                        placeholder="Ex: Corante vermelho, camarão..."
+                        className="w-full p-3 bg-lab-white border border-outline-variant/40 rounded-lg outline-none font-sans text-xs text-primary placeholder:text-outline"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Contexto Clínico (Medicamentos & Suplementos)
+                      </label>
+                      <textarea
+                        value={editingProfile.medications}
+                        onChange={(e) => setEditingProfile({ ...editingProfile, medications: e.target.value })}
+                        placeholder="Ex: Suplementação de Metilfolato 400mcg e Ômega-3 no café da manhã."
+                        rows={2}
+                        className="w-full p-3 bg-lab-white border border-outline-variant/40 rounded-lg outline-none font-sans text-xs text-primary placeholder:text-outline"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: HABITS */}
+              {activeTab === "habits" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-white border border-outline-variant/40 rounded-xl p-6 shadow-sm space-y-6">
+                    <div>
+                      <h4 className="font-serif text-md font-bold text-primary">Hábitos e Refeições</h4>
+                      <p className="font-sans text-xs text-scientific-gray mt-1">
+                        Padrões de consumo, influências locais e fuso horário.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                          Peso Padrão por Refeição
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editingProfile.mealWeightPattern || 450}
+                            onChange={(e) => setEditingProfile({ ...editingProfile, mealWeightPattern: parseInt(e.target.value) || 450 })}
+                            className="w-24 px-3 py-2 bg-white border border-outline-variant/50 rounded outline-none font-sans text-xs text-primary font-semibold"
+                          />
+                          <span className="text-xs text-scientific-gray font-semibold">gramas</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider block">
+                        Hábitos Locais & Culturais
+                      </label>
+                      <textarea
+                        value={editingProfile.localHabits || ""}
+                        onChange={(e) => setEditingProfile({ ...editingProfile, localHabits: e.target.value })}
+                        placeholder="Ex: Costuma comer tarde da noite; prefere alimentos mais picantes; almoça muito rápido no trabalho."
+                        rows={2}
+                        className="w-full p-3 bg-lab-white border border-outline-variant/40 rounded-lg outline-none font-sans text-xs text-primary placeholder:text-outline"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Action buttons */}
               <div className="flex gap-4">

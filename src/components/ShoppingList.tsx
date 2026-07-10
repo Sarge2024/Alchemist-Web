@@ -100,9 +100,11 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
         setTimeout(() => setToastMessage(null), 3000);
         return;
       }
+        // Coletar todos os ingredientes brutos
+      const rawIngredients: { name: string; quantity: number; unit: string }[] = [];
       
       const ingredientMap = new Map<string, { quantity: number, unit: string, category: string }>();
-      
+
       plan.days.forEach(day => {
         day.meals.forEach(meal => {
           meal.courses.forEach(course => {
@@ -117,77 +119,86 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                  }
               } else if (course.recipe.ingredients) {
                 course.recipe.ingredients.forEach(ing => {
-                const nameLower = (ing.name || "").toLowerCase().trim();
-                if (!nameLower) return;
-                
-                let numQty = 1;
-                let strUnit = (ing.unit || "").trim() || "unid";
-                
-                if (typeof ing.quantity === 'number') {
-                   numQty = ing.quantity;
-                } else if (typeof (ing.quantity as any) === 'string') {
-                   const stringQty = ing.quantity as any as string;
-                   const qtyMatch = stringQty.match(/([\d.,\s\/]+)\s*(.*)/);
-                   if (qtyMatch) {
-                       let qStr = qtyMatch[1].trim().replace(',', '.');
-                       if (qStr.includes('/')) {
-                         const parts = qStr.split('/');
-                         if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
-                           numQty = parseFloat(parts[0]) / parseFloat(parts[1]);
+                  const nameLower = (ing.name || "").toLowerCase().trim();
+                  if (!nameLower) return;
+                  
+                  let numQty = 1;
+                  let strUnit = (ing.unit || "").trim() || "unid";
+                  
+                  if (typeof ing.quantity === 'number') {
+                     numQty = ing.quantity;
+                  } else if (typeof (ing.quantity as any) === 'string') {
+                     const stringQty = ing.quantity as any as string;
+                     const qtyMatch = stringQty.match(/([\d.,\s\/]+)\s*(.*)/);
+                     if (qtyMatch) {
+                         let qStr = qtyMatch[1].trim().replace(',', '.');
+                         if (qStr.includes('/')) {
+                           const parts = qStr.split('/');
+                           if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
+                             numQty = parseFloat(parts[0]) / parseFloat(parts[1]);
+                           }
+                         } else {
+                           numQty = parseFloat(qStr);
                          }
-                       } else {
-                         numQty = parseFloat(qStr);
-                       }
-                       if (isNaN(numQty)) numQty = 1;
-                       if (qtyMatch[2].trim()) strUnit = qtyMatch[2].trim();
-                   }
-                }
-                
-                // Aplicar escala do plano
-                numQty = numQty * (plan.portionScale / 2);
-
-                // Normalização de Unidades
-                let normUnit = strUnit.toLowerCase().trim();
-                let normQty = numQty;
-                
-                // Volume
-                if (["ml", "mililitro", "mililitros"].includes(normUnit)) { normQty /= 1000; normUnit = "l"; }
-                else if (["xícara", "xicara", "xícaras", "xicaras"].includes(normUnit)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
-                else if (["colher de sopa", "colheres de sopa", "colher sopa", "sopa"].includes(normUnit)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
-                else if (["colher de chá", "colheres de chá", "colher cha", "chá"].includes(normUnit)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
-                
-                // Massa
-                if (["g", "grama", "gramas"].includes(normUnit)) { normQty /= 1000; normUnit = "kg"; }
-                else if (["quilo", "quilos", "quilograma", "quilogramas"].includes(normUnit)) { normUnit = "kg"; }
-                
-                // Genéricos
-                if (["unidade", "unidades", "unid.", ""].includes(normUnit)) { normUnit = "unid"; }
-                
-                const current = ingredientMap.get(nameLower);
-                let category: "Hortifruti" | "Laticínios & Ovos" | "Produtos Genéricos" = "Produtos Genéricos";
-                if ((ing as any).group === "Hortifruti" || nameLower.match(/cebola|alho|tomate|alface|limão|batata|cenoura|fruta|salsa|cebolinha|coentro/)) {
-                  category = "Hortifruti";
-                } else if (nameLower.match(/leite|queijo|manteiga|ovo|creme|iogurte/)) {
-                  category = "Laticínios & Ovos";
-                }
-                
-                if (current) {
-                  if (current.unit === normUnit) {
-                    current.quantity += normQty;
-                  } else {
-                    const uniqueKey = nameLower + ` (${normUnit})`;
-                    const existingAlt = ingredientMap.get(uniqueKey);
-                    if (existingAlt) existingAlt.quantity += normQty;
-                    else ingredientMap.set(uniqueKey, { quantity: normQty, unit: normUnit, category });
+                         if (isNaN(numQty)) numQty = 1;
+                         if (qtyMatch[2].trim()) strUnit = qtyMatch[2].trim();
+                     }
                   }
-                } else {
-                   ingredientMap.set(nameLower, { quantity: normQty, unit: normUnit, category });
-                }
-              });
-            }
+                  
+                  // Aplicar escala do plano
+                  numQty = numQty * (plan.portionScale / 2);
+                  
+                  // Aplicar Fator de Correção (Peso Bruto = Peso Limpo x FC)
+                  if (ing.correctionFactor && ing.correctionFactor > 1) {
+                    numQty = numQty * ing.correctionFactor;
+                  }
+                  
+                  rawIngredients.push({ name: nameLower, quantity: numQty, unit: strUnit });
+                });
+              }
             }
           });
         });
+      });
+      
+      // Processar ingredientes através do Motor Nutricional para Padronização via DishAlchemists DB
+      const NutritionalEngineService = (await import('../services/NutritionalEngineService')).NutritionalEngineService;
+      const { details } = await NutritionalEngineService.calculateRecipeNutrition(rawIngredients);
+      
+      details.forEach(item => {
+        // Obter nome e categoria padronizados, com fallback para o original
+        const standardizedName = item.base_data?.name ? item.base_data.name.toLowerCase().trim() : item.ingredient;
+        const category = item.base_data?.category || "Produtos Genéricos";
+        
+        // As quantidades já vêm normalizadas (em g, ml, ou fator de conversão) do Motor!
+        // No entanto, para a lista de compras, queremos manter as medidas visuais quando possível,
+        // mas o motor converteu tudo pra Gramas ou ML. 
+        // Vamos usar o quantity e unit do retorno que já são processados ou os originais se falhou.
+        let normQty = item.quantity;
+        let normUnit = item.unit.toLowerCase().trim();
+        
+        // Conversão de grandezas para compras (g -> kg, ml -> l)
+        if (["g", "grama", "gramas"].includes(normUnit)) { normQty /= 1000; normUnit = "kg"; }
+        else if (["ml", "mililitro", "mililitros"].includes(normUnit)) { normQty /= 1000; normUnit = "l"; }
+        else if (["xícara", "xicara", "xícaras", "xicaras"].includes(normUnit)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
+        else if (["colher de sopa", "colheres de sopa", "colher sopa", "sopa"].includes(normUnit)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
+        else if (["colher de chá", "colheres de chá", "colher cha", "chá"].includes(normUnit)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
+        else if (["quilo", "quilos", "quilograma", "quilogramas"].includes(normUnit)) { normUnit = "kg"; }
+        else if (["unidade", "unidades", "unid.", ""].includes(normUnit)) { normUnit = "unid"; }
+        
+        const current = ingredientMap.get(standardizedName);
+        if (current) {
+          if (current.unit === normUnit) {
+            current.quantity += normQty;
+          } else {
+            const uniqueKey = standardizedName + ` (${normUnit})`;
+            const existingAlt = ingredientMap.get(uniqueKey);
+            if (existingAlt) existingAlt.quantity += normQty;
+            else ingredientMap.set(uniqueKey, { quantity: normQty, unit: normUnit, category });
+          }
+        } else {
+           ingredientMap.set(standardizedName, { quantity: normQty, unit: normUnit, category });
+        }
       });
       
       const newItems: ShoppingItem[] = [];

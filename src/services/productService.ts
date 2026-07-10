@@ -66,6 +66,9 @@ export const productService = {
     portionUnit?: string;
     imageUrl?: string;
     allergens?: string[];
+    price?: number;
+    totalPackageSize?: number;
+    totalPackageUnit?: string;
   }): Promise<{ success: boolean; product?: IndustrialProduct; error?: string }> {
     const response = await fetch(API_BASE, {
       method: "POST",

@@ -46,6 +46,18 @@ export interface Profile {
   allergies: string[]; // e.g. ["Amendoim"]
   medications: string; // text description
   approvedRecipes?: { recipeId: string, period: string }[]; // Preferências de receitas aprovadas por período
+  
+  // Biometric & Clinical Enrichment
+  age?: number;
+  gender?: "male" | "female" | "other";
+  weight?: number; // kg
+  height?: number; // cm
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  dietGoal?: "weight_loss" | "maintenance" | "muscle_gain";
+  mealWeightPattern?: number; // em gramas, ex: 450
+  localHabits?: string; // Text field para hábitos locais
+  dietaryRestrictions?: string[]; // Seleções múltiplas ex: ["Sem Glúten", "Vegano"]
+  allergens?: string; // Campo de texto livre para alergias específicas
 }
 
 export interface RecipeNutrition {
@@ -60,6 +72,11 @@ export interface RecipeIngredient {
   name?: string;
   quantity: number;
   unit: string;
+  grossWeight?: number;
+  cleanWeight?: number;
+  cookedWeight?: number;
+  correctionFactor?: number;
+  cookingFactor?: number;
 }
 
 export interface Recipe {
@@ -73,6 +90,7 @@ export interface Recipe {
   nutrition: RecipeNutrition;
   ingredients?: RecipeIngredient[];
   defaultDurabilityDays?: number;
+  estimatedCost?: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -137,6 +155,12 @@ export interface LogEntry {
   category: "Planejado" | "Ocasional";
   details: string;
   calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  cost?: number; // Custo associado ao consumo dessa refeição
+  status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING";
+  plannedMealRef?: string; // Reference to the course/meal in the WeeklyPlan
 }
 
 export interface WeeklyPlan {
@@ -167,6 +191,7 @@ export interface ConsumptionLogDoc {
   totalProtein: number;
   totalCarbs: number;
   totalFat: number;
+  totalCost?: number; // Custo financeiro total consolidado do dia
 }
 
 export interface IndustrialProduct {
@@ -180,4 +205,7 @@ export interface IndustrialProduct {
   nutrition: RecipeNutrition; // reutiliza o tipo existente
   allergens?: string[];
   source: 'OFF' | 'MANUAL';
+  price?: number;
+  totalPackageSize?: number;
+  totalPackageUnit?: string;
 }

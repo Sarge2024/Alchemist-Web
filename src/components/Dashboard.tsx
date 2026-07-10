@@ -7,19 +7,24 @@ import { plannerService } from "../services/plannerService";
 
 interface DashboardProps {
   currentProfile: Profile;
+  profiles?: Profile[];
   familyId: string | null;
   activeProfileId: string | null;
   onNavigateToView: (view: any) => void;
+  onSelectActiveProfile?: (id: string) => void;
 }
 
-export default function Dashboard({ currentProfile, familyId, activeProfileId, onNavigateToView }: DashboardProps) {
+export default function Dashboard({ currentProfile, profiles, familyId, activeProfileId, onNavigateToView, onSelectActiveProfile }: DashboardProps) {
   const [pendingApproval, setPendingApproval] = useState<string | null>("Elena R.");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  const [currentProteinPct, setCurrentProteinPct] = useState(0);
-  const [currentFiberPct, setCurrentFiberPct] = useState(0);
-  const [currentHydrationPct, setCurrentHydrationPct] = useState(0);
-  const [currentCarbsPct, setCurrentCarbsPct] = useState(0);
+  const [plannedMacros, setPlannedMacros] = useState({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+  const [actualMacros, setActualMacros] = useState({ protein: 0, carbs: 0, fat: 0, kcal: 0 });
+  
+  // For Fiber and Hydration (mocks for now as they are not in the profile)
+  const [plannedFiber, setPlannedFiber] = useState(0);
+  const [actualFiber, setActualFiber] = useState(0);
+  
   const [todayMeals, setTodayMeals] = useState<any[]>([]);
 
   useEffect(() => {
@@ -30,45 +35,80 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
       const weekId = plannerService.getCurrentWeekId();
       
       try {
-        // Load consumption logs for gauges
-        const logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
-        if (logDoc) {
-          // Simple estimation based on total calories if macros are not split yet
-          const totalKcal = logDoc.totalCalories;
-          // Simulation: mapping calories to macro goals (since the form currently only tracks kcal)
-          setCurrentProteinPct(Math.min(Math.round((totalKcal / 2450) * 100), 100));
-          setCurrentFiberPct(Math.min(Math.round((totalKcal / 2450) * 90), 100));
-          setCurrentHydrationPct(Math.min(Math.round((totalKcal / 2450) * 80), 100));
-          setCurrentCarbsPct(Math.min(Math.round((totalKcal / 2450) * 105), 100));
-        }
+        let pMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+        let aMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+        let pFiber = 0;
+        let aFiber = 0;
         
         // Load today's plan
         const plan = await plannerService.getWeeklyPlan(familyId, activeProfileId, weekId);
+        let plannedMealsData: any[] = [];
+        
         if (plan) {
           const currentDayIndex = Math.max(0, new Date().getDay() - 1); // 1 = Monday
           const todayPlan = plan.days[currentDayIndex];
           
           if (todayPlan) {
-            // Encontra todas as receitas planejadas para o dia atual
-            const plannedMeals: any[] = [];
             todayPlan.meals.forEach((meal, mIdx) => {
               meal.courses.forEach((course, cIdx) => {
                 if (course.recipe) {
-                  plannedMeals.push({
-                    id: `planned-${mIdx}-${cIdx}`,
+                  const rId = `planned-${mIdx}-${cIdx}`;
+                  const cal = course.recipe.nutrition?.calories || 0;
+                  const prot = course.recipe.nutrition?.protein || 0;
+                  const carb = course.recipe.nutrition?.carbs || 0;
+                  const fat = course.recipe.nutrition?.fat || 0;
+                  
+                  pMacros.kcal += cal;
+                  pMacros.protein += prot;
+                  pMacros.carbs += carb;
+                  pMacros.fat += fat;
+                  pFiber += (carb * 0.1); // mock fiber
+                  
+                  plannedMealsData.push({
+                    id: rId,
                     name: course.recipe.title,
                     description: course.recipe.description,
                     image: course.recipe.image,
-                    calories: course.recipe.nutrition?.calories || 0,
+                    nutrition: {
+                      calories: cal,
+                      protein: prot,
+                      carbs: carb,
+                      fat: fat
+                    },
                     time: meal.name,
-                    completed: false
+                    status: "PENDING"
                   });
                 }
               });
             });
-            setTodayMeals(plannedMeals);
           }
         }
+        
+        // Load consumption logs for gauges
+        const logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
+        if (logDoc) {
+          aMacros.kcal = logDoc.totalCalories || 0;
+          aMacros.protein = logDoc.totalProtein || 0;
+          aMacros.carbs = logDoc.totalCarbs || 0;
+          aMacros.fat = logDoc.totalFat || 0;
+          aFiber = (aMacros.carbs * 0.1); // mock
+          
+          // Update meal statuses based on logs
+          plannedMealsData = plannedMealsData.map(meal => {
+            const entry = logDoc.entries.find(e => e.plannedMealRef === meal.id);
+            if (entry) {
+              return { ...meal, status: entry.status };
+            }
+            return meal;
+          });
+        }
+        
+        setPlannedMacros(pMacros);
+        setActualMacros(aMacros);
+        setPlannedFiber(pFiber);
+        setActualFiber(aFiber);
+        setTodayMeals(plannedMealsData);
+
       } catch (e) {
         console.error("Erro ao carregar dashboard:", e);
       }
@@ -76,8 +116,60 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
     loadDashboardData();
   }, [familyId, activeProfileId]);
 
-  const toggleMeal = (mealId: string) => {
-    setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m));
+  const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING") => {
+    // Optimistic UI update
+    setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, status } : m));
+    
+    // Save to backend
+    if (familyId && activeProfileId) {
+      try {
+        const dateId = consumptionService.formatDateId(new Date());
+        let logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
+        
+        if (!logDoc) {
+          logDoc = consumptionService.generateEmptyLogDoc(familyId, activeProfileId, dateId);
+        }
+        
+        const meal = todayMeals.find(m => m.id === mealId);
+        if (!meal) return;
+        
+        // Remove existing entry if any
+        logDoc.entries = logDoc.entries.filter(e => e.plannedMealRef !== mealId);
+        
+        // Add new entry
+        logDoc.entries.push({
+          id: `entry-${Date.now()}`,
+          time: meal.time,
+          foodName: meal.name,
+          category: "Planejado",
+          status,
+          plannedMealRef: meal.id,
+          calories: meal.nutrition.calories,
+          protein: meal.nutrition.protein,
+          carbs: meal.nutrition.carbs,
+          fat: meal.nutrition.fat,
+          details: ""
+        });
+        
+        await consumptionService.saveDayLogs(logDoc);
+        
+        // Atualiza macros localmente
+        let aMacros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+        logDoc.entries.forEach(e => {
+          if (e.status !== "SKIPPED") {
+            aMacros.kcal += e.calories;
+            aMacros.protein += e.protein;
+            aMacros.carbs += e.carbs;
+            aMacros.fat += e.fat;
+          }
+        });
+        setActualMacros(aMacros);
+        setActualFiber(aMacros.carbs * 0.1);
+        
+      } catch (err) {
+        console.error("Erro ao atualizar status:", err);
+      }
+    }
   };
 
   const handleApproval = (action: "approve" | "reject") => {
@@ -88,6 +180,28 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
     }
     setPendingApproval(null);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+  
+  // Calculate goals and percentages
+  const goalKcal = currentProfile.dailyCalories || 2000;
+  const goalProtein = (goalKcal * (currentProfile.proteinPercentage || 30) / 100) / 4;
+  const goalCarbs = (goalKcal * (currentProfile.carbsPercentage || 40) / 100) / 4;
+  const goalFat = (goalKcal * (currentProfile.fatPercentage || 30) / 100) / 9;
+  const goalFiber = 30; // standard mock
+
+  const getPcts = (actual: number, planned: number, goal: number) => ({
+    actual: Math.min(Math.round((actual / goal) * 100), 100) || 0,
+    planned: Math.min(Math.round((planned / goal) * 100), 100) || 0,
+    actualRaw: Math.round(actual),
+    plannedRaw: Math.round(planned),
+    goalRaw: Math.round(goal)
+  });
+
+  const pcts = {
+    protein: getPcts(actualMacros.protein, plannedMacros.protein, goalProtein),
+    carbs: getPcts(actualMacros.carbs, plannedMacros.carbs, goalCarbs),
+    fat: getPcts(actualMacros.fat, plannedMacros.fat, goalFat),
+    fiber: getPcts(actualFiber, plannedFiber, goalFiber)
   };
 
   return (
@@ -113,12 +227,33 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
         )}
       </AnimatePresence>
 
-      {/* Page Title */}
-      <div>
-        <h2 className="font-serif text-3xl font-bold text-primary tracking-tight">Análise Semanal</h2>
-        <p className="font-sans text-sm text-scientific-gray mt-1">
-          Acompanhamento dinâmico do metabolismo {currentProfile.name === "Elena Vance" ? "Elena Vance" : currentProfile.name}.
-        </p>
+      {/* Page Title & Navigator */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h2 className="font-serif text-3xl font-bold text-primary tracking-tight">Análise Semanal</h2>
+          <p className="font-sans text-sm text-scientific-gray mt-1">
+            Acompanhamento dinâmico do metabolismo.
+          </p>
+        </div>
+        
+        {/* Profile Switcher */}
+        {profiles && profiles.length > 0 && onSelectActiveProfile && (
+          <div className="flex items-center gap-2 bg-white border border-outline-variant/40 rounded-lg p-1.5 shadow-sm">
+            <span className="text-[10px] uppercase font-bold text-scientific-gray pl-2">Membro:</span>
+            <div className="flex gap-1">
+              {profiles.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => onSelectActiveProfile(p.id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm font-semibold ${p.id === activeProfileId ? 'bg-primary text-white' : 'hover:bg-surface-container text-primary/70'}`}
+                >
+                  <img src={p.avatar} alt={p.name} className="w-5 h-5 rounded-full object-cover" />
+                  {p.name.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -138,136 +273,80 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
               <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
                 <div className="relative w-24 h-24 mb-4">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-surface-container"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    />
-                    <motion.path
-                      className="text-primary"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeDasharray="100"
-                      initial={{ strokeDashoffset: 100 }}
-                      animate={{ strokeDashoffset: 100 - currentProteinPct }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      strokeLinecap="round"
-                    />
+                    <circle cx="18" cy="18" r="15.915" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <circle cx="18" cy="18" r="11.5" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <motion.circle cx="18" cy="18" r="11.5" fill="none" className="text-primary opacity-40" stroke="currentColor" strokeWidth="2.5" strokeDasharray="72.25" initial={{ strokeDashoffset: 72.25 }} animate={{ strokeDashoffset: 72.25 - (pcts.protein.planned * 0.7225) }} transition={{ duration: 0.8, ease: "easeOut" }} strokeLinecap="round" />
+                    <motion.circle cx="18" cy="18" r="15.915" fill="none" className="text-primary" stroke="currentColor" strokeWidth="2.5" strokeDasharray="100" initial={{ strokeDashoffset: 100 }} animate={{ strokeDashoffset: 100 - pcts.protein.actual }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} strokeLinecap="round" />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center font-sans font-bold text-lg text-primary">
-                    {currentProteinPct}%
+                  <div className="absolute inset-0 flex flex-col items-center justify-center font-sans">
+                    <span className="font-bold text-lg text-primary leading-none">{pcts.protein.actual}%</span>
                   </div>
                 </div>
                 <span className="font-sans text-xs font-semibold text-scientific-gray uppercase tracking-widest mb-0.5">
                   Proteína
                 </span>
-                <span className="font-sans text-xs text-on-surface font-medium">Meta: 120g/dia</span>
+                <span className="font-sans text-[10px] text-on-surface font-medium leading-tight">Meta: {pcts.protein.goalRaw}g</span>
+                <span className="font-sans text-[10px] text-scientific-gray leading-tight">Prev: {pcts.protein.plannedRaw}g | Real: {pcts.protein.actualRaw}g</span>
               </div>
 
               {/* Fiber Ring */}
               <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
                 <div className="relative w-24 h-24 mb-4">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-surface-container"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    />
-                    <motion.path
-                      className="text-gold-leaf"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeDasharray="100"
-                      initial={{ strokeDashoffset: 100 }}
-                      animate={{ strokeDashoffset: 100 - currentFiberPct }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      strokeLinecap="round"
-                    />
+                    <circle cx="18" cy="18" r="15.915" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <circle cx="18" cy="18" r="11.5" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <motion.circle cx="18" cy="18" r="11.5" fill="none" className="text-gold-leaf opacity-40" stroke="currentColor" strokeWidth="2.5" strokeDasharray="72.25" initial={{ strokeDashoffset: 72.25 }} animate={{ strokeDashoffset: 72.25 - (pcts.fiber.planned * 0.7225) }} transition={{ duration: 0.8, ease: "easeOut" }} strokeLinecap="round" />
+                    <motion.circle cx="18" cy="18" r="15.915" fill="none" className="text-gold-leaf" stroke="currentColor" strokeWidth="2.5" strokeDasharray="100" initial={{ strokeDashoffset: 100 }} animate={{ strokeDashoffset: 100 - pcts.fiber.actual }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} strokeLinecap="round" />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center font-sans font-bold text-lg text-gold-leaf">
-                    {currentFiberPct}%
+                  <div className="absolute inset-0 flex flex-col items-center justify-center font-sans">
+                    <span className="font-bold text-lg text-gold-leaf leading-none">{pcts.fiber.actual}%</span>
                   </div>
                 </div>
                 <span className="font-sans text-xs font-semibold text-scientific-gray uppercase tracking-widest mb-0.5">
                   Fibras
                 </span>
-                <span className="font-sans text-xs text-on-surface font-medium">Meta: 30g/dia</span>
+                <span className="font-sans text-[10px] text-on-surface font-medium leading-tight">Meta: {pcts.fiber.goalRaw}g</span>
+                <span className="font-sans text-[10px] text-scientific-gray leading-tight">Prev: {pcts.fiber.plannedRaw}g | Real: {pcts.fiber.actualRaw}g</span>
               </div>
 
               {/* Carbs Ring */}
               <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
                 <div className="relative w-24 h-24 mb-4">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-surface-container"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    />
-                    <motion.path
-                      className="text-tertiary"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeDasharray="100"
-                      initial={{ strokeDashoffset: 100 }}
-                      animate={{ strokeDashoffset: 100 - currentCarbsPct }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      strokeLinecap="round"
-                    />
+                    <circle cx="18" cy="18" r="15.915" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <circle cx="18" cy="18" r="11.5" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <motion.circle cx="18" cy="18" r="11.5" fill="none" className="text-tertiary opacity-40" stroke="currentColor" strokeWidth="2.5" strokeDasharray="72.25" initial={{ strokeDashoffset: 72.25 }} animate={{ strokeDashoffset: 72.25 - (pcts.carbs.planned * 0.7225) }} transition={{ duration: 0.8, ease: "easeOut" }} strokeLinecap="round" />
+                    <motion.circle cx="18" cy="18" r="15.915" fill="none" className="text-tertiary" stroke="currentColor" strokeWidth="2.5" strokeDasharray="100" initial={{ strokeDashoffset: 100 }} animate={{ strokeDashoffset: 100 - pcts.carbs.actual }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} strokeLinecap="round" />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center font-sans font-bold text-lg text-tertiary">
-                    {currentCarbsPct}%
+                  <div className="absolute inset-0 flex flex-col items-center justify-center font-sans">
+                    <span className="font-bold text-lg text-tertiary leading-none">{pcts.carbs.actual}%</span>
                   </div>
                 </div>
                 <span className="font-sans text-xs font-semibold text-scientific-gray uppercase tracking-widest mb-0.5">
                   Carboidratos
                 </span>
-                <span className="font-sans text-xs text-on-surface font-medium">Meta: 280g/dia</span>
+                <span className="font-sans text-[10px] text-on-surface font-medium leading-tight">Meta: {pcts.carbs.goalRaw}g</span>
+                <span className="font-sans text-[10px] text-scientific-gray leading-tight">Prev: {pcts.carbs.plannedRaw}g | Real: {pcts.carbs.actualRaw}g</span>
               </div>
 
-              {/* Hydration Ring */}
+              {/* Fat Ring */}
               <div className="bg-white border border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
                 <div className="relative w-24 h-24 mb-4">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-surface-container"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    />
-                    <motion.path
-                      className="text-secondary"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeDasharray="100"
-                      initial={{ strokeDashoffset: 100 }}
-                      animate={{ strokeDashoffset: 100 - currentHydrationPct }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      strokeLinecap="round"
-                    />
+                    <circle cx="18" cy="18" r="15.915" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <circle cx="18" cy="18" r="11.5" fill="none" className="text-surface-container" stroke="currentColor" strokeWidth="2.5" />
+                    <motion.circle cx="18" cy="18" r="11.5" fill="none" className="text-secondary opacity-40" stroke="currentColor" strokeWidth="2.5" strokeDasharray="72.25" initial={{ strokeDashoffset: 72.25 }} animate={{ strokeDashoffset: 72.25 - (pcts.fat.planned * 0.7225) }} transition={{ duration: 0.8, ease: "easeOut" }} strokeLinecap="round" />
+                    <motion.circle cx="18" cy="18" r="15.915" fill="none" className="text-secondary" stroke="currentColor" strokeWidth="2.5" strokeDasharray="100" initial={{ strokeDashoffset: 100 }} animate={{ strokeDashoffset: 100 - pcts.fat.actual }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} strokeLinecap="round" />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center font-sans font-bold text-lg text-secondary">
-                    {currentHydrationPct}%
+                  <div className="absolute inset-0 flex flex-col items-center justify-center font-sans">
+                    <span className="font-bold text-lg text-secondary leading-none">{pcts.fat.actual}%</span>
                   </div>
                 </div>
                 <span className="font-sans text-xs font-semibold text-scientific-gray uppercase tracking-widest mb-0.5">
-                  Hidratação
+                  Gorduras
                 </span>
-                <span className="font-sans text-xs text-on-surface font-medium">Meta: 2.5L/dia</span>
+                <span className="font-sans text-[10px] text-on-surface font-medium leading-tight">Meta: {pcts.fat.goalRaw}g</span>
+                <span className="font-sans text-[10px] text-scientific-gray leading-tight">Prev: {pcts.fat.plannedRaw}g | Real: {pcts.fat.actualRaw}g</span>
               </div>
             </div>
           </div>
@@ -297,30 +376,50 @@ export default function Dashboard({ currentProfile, familyId, activeProfileId, o
                         <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">{meal.time}</span>
                         <h4 className="font-sans text-sm font-semibold text-primary">{meal.name}</h4>
                         <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider ${
-                          meal.completed
-                            ? "bg-secondary-container text-on-secondary-container"
-                            : "bg-surface-container-high text-on-surface-variant"
+                          meal.status === "CONSUMED_AS_PLANNED" ? "bg-primary text-white" :
+                          meal.status === "SKIPPED" ? "bg-error text-white" :
+                          meal.status === "SUBSTITUTED" ? "bg-secondary text-white" :
+                          "bg-surface-container-high text-on-surface-variant"
                         }`}>
-                          {meal.completed ? "CONCLUÍDO" : "PLANEJADO"}
+                          {meal.status === "PENDING" ? "PLANEJADO" : meal.status}
                         </span>
                       </div>
                       <p className="font-sans text-xs text-scientific-gray line-clamp-1">{meal.description}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-3">
+                    <div className="flex flex-col items-end gap-2">
                       <span className="font-serif text-sm font-semibold text-primary leading-none">
-                        {meal.calories} <span className="text-[10px] text-scientific-gray uppercase">kcal</span>
+                        {meal.nutrition.calories} <span className="text-[10px] text-scientific-gray uppercase">kcal</span>
                       </span>
-                      <button
-                        onClick={() => toggleMeal(meal.id)}
-                        className="text-on-surface-variant hover:text-primary transition-colors focus:outline-none cursor-pointer"
-                        title={meal.completed ? "Desmarcar conclusão" : "Marcar como concluído"}
-                      >
-                        {meal.completed ? (
-                          <CheckCircle2 className="w-5 h-5 text-secondary fill-secondary-container/20 stroke-[2]" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-outline-variant stroke-[1.5]" />
-                        )}
-                      </button>
+                      
+                      <div className="flex gap-1.5 mt-1">
+                        <button
+                          onClick={() => toggleMeal(meal.id, meal.status === "CONSUMED_AS_PLANNED" ? "PENDING" : "CONSUMED_AS_PLANNED")}
+                          className={`p-1 rounded-md transition-colors ${
+                            meal.status === "CONSUMED_AS_PLANNED" ? "bg-primary text-white" : "bg-white text-primary border border-primary/20 hover:bg-primary/5"
+                          }`}
+                          title="Consumido como Planejado"
+                        >
+                           <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => toggleMeal(meal.id, meal.status === "SKIPPED" ? "PENDING" : "SKIPPED")}
+                          className={`p-1 rounded-md transition-colors ${
+                            meal.status === "SKIPPED" ? "bg-error text-white" : "bg-white text-error border border-error/20 hover:bg-error/5"
+                          }`}
+                          title="Não Consumido (Pulo)"
+                        >
+                           <Circle className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => toggleMeal(meal.id, meal.status === "SUBSTITUTED" ? "PENDING" : "SUBSTITUTED")}
+                          className={`p-1 rounded-md transition-colors ${
+                            meal.status === "SUBSTITUTED" ? "bg-secondary text-white" : "bg-white text-secondary border border-secondary/20 hover:bg-secondary/5"
+                          }`}
+                          title="Substituído"
+                        >
+                           <RefreshCw className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))

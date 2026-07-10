@@ -9,6 +9,7 @@ Este documento reúne o mapeamento completo da arquitetura, funcionalidades, int
 | Versão | Data       | Autor       | Descrição das Alterações |
 | :---   | :---       | :---        | :---                     |
 | **1.0**| 08/07/2026 | Antigravity | Inicialização do documento de especificações contendo o levantamento arquitetural, funcional e de integrações. Inclusão da especificação do Scanner de Pratos Multimodal. |
+| **1.1**| 09/07/2026 | Antigravity | Refatoração arquitetural do Backend (modularização de rotas Express), otimização de performance (Caching, Batching) e definição da integração de ingredientes via PostgreSQL do Dish Alchemists. |
 
 ---
 
@@ -51,11 +52,13 @@ A aplicação está desenhada sob uma arquitetura de **BFF (Backend For Frontend
 *   **Tecnologia:** Node.js + Express + tsx (TypeScript Execute).
 *   **Porta padrão:** `3001` (com proxy do Vite em `/api`).
 *   **Função:** Atuar como um proxy seguro para injetar tokens e chaves de API nas chamadas e executar processamentos complexos (como o pipeline do Gemini + Supabase) reduzindo a carga do cliente.
+*   **Arquitetura:** O servidor backend foi refatorado adotando um padrão de roteamento modular. O ponto de entrada principal (`server.ts`) delega funções a sub-roteadores segmentados por domínio (`/src/infra/api/`), que incluem: `adminRouter.ts`, `loungeRouter.ts`, `chatRouter.ts` e `gamificationRouter.ts`.
+*   **Performance:** Implementação de camadas de *Caching* em memória (TTL) e processamento em *Batching* para motor nutricional (eliminando gargalos de queries repetidas N+1).
 
 ### 2.3. Armazenamento e APIs Externas
 *   **Firebase Firestore:** Persistência de dados do cliente (perfis, histórico de consumo, listas de compras e planejamentos semanais).
 *   **Supabase (PostgreSQL):** Utilizado especificamente para a base de dados de alimentos (TACO/USDA) e receitas globais por conta de capacidades de busca textual e indexação.
-*   **DishAlchemists API:** Backend externo de receitas e ingredientes principais (`https://dishalchemists.com/api/v1/public`).
+*   **DishAlchemists API (PostgreSQL Principal):** Backend externo (proprietário) atuando como fonte da verdade (SSOT) tanto para o cadastro global de receitas quanto para a **base padronizada de ingredientes globais**, dispensando bancos locais duplicados (`https://dishalchemists.com/api/v1/public`).
 *   **Google Gemini API:** Integração através do SDK `@google/genai` (modelo `gemini-2.5-flash`) para segmentação e classificação de imagens de pratos.
 
 ---
