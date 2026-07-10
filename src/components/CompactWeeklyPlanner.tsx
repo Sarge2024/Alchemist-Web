@@ -473,7 +473,10 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                   </p>
                 </div>
                 <button
-                  onClick={() => setRecipeModalOpen(false)}
+                  onClick={() => {
+                    setRecipeModalOpen(false);
+                    setTargetSlot(null);
+                  }}
                   className="p-2 rounded-full hover:bg-outline-variant/30 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -503,19 +506,20 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                   ) : (
                     <div className="flex flex-col gap-3">
                       {(() => {
+                        if (!targetSlot || !weeklyPlan) return null;
+                        const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                        const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
+
                         let filteredRecipes = availableRecipes.filter(recipe => {
-                          if (!targetSlot || !weeklyPlan) return true;
-                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
-                          
-                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
-                          
                           const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
                           const rawMom = (recipe as any).momento;
                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
                           
-                          const normalizedPeriods = currentPeriod === "Café da Tarde" 
-                            ? ["Café da Tarde", "Lanche / Chá da Tarde", "Lanche"] 
-                            : [currentPeriod];
+                          const normalizedPeriods = (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia")
+                            ? ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"]
+                            : (currentPeriod === "Almoço" || currentPeriod === "Jantar")
+                              ? ["Almoço", "Jantar", "Almoço / Jantar"]
+                              : [currentPeriod];
                           const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
                           
                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
@@ -527,7 +531,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           }
 
                           const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
-                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
+                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia") || m.includes("Lanche") || m.includes("Lanche da Tarde");
                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
                           switch (courseType) {
@@ -536,7 +540,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                             case "Sobremesa": 
                               return isDessert;
                             case "Bebida": 
-                              return isDrink && isExactMealMatch;
+                              return isDrink;
                             case "Lanche": 
                               return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
                             case "Prato Principal": 
@@ -549,12 +553,15 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                           }
                         });
 
-                        
-                        // Sort so approved recipes appear first
+                        // Sort so approved recipes appear first (prioritizing exact period match)
                         filteredRecipes.sort((a, b) => {
-                          const aApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === a.id) ? 1 : 0;
-                          const bApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === b.id) ? 1 : 0;
-                          return bApp - aApp;
+                          const getWeight = (recipe: Recipe) => {
+                            const entries = activeProfile?.approvedRecipes?.filter(r => r.recipeId === recipe.id) || [];
+                            if (entries.some(r => r.period === currentPeriod)) return 2;
+                            if (entries.length > 0) return 1;
+                            return 0;
+                          };
+                          return getWeight(b) - getWeight(a);
                         });
 
                         return (

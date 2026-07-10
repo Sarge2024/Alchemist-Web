@@ -889,7 +889,10 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                   </p>
                 </div>
                 <button
-                  onClick={() => setRecipeModalOpen(false)}
+                  onClick={() => {
+                    setRecipeModalOpen(false);
+                    setTargetSlot(null);
+                  }}
                   className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-outline-variant/30 text-scientific-gray transition-colors focus:outline-none"
                 >
                   <X className="w-5 h-5" />
@@ -918,56 +921,61 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                     <p className="text-center font-sans text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {(() => {
-                        let filteredRecipes = availableRecipes.filter(recipe => {
-                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
-                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
-                          
-                          const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
-                          const rawMom = (recipe as any).momento;
-                          const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
-                          
-                          const normalizedPeriods = currentPeriod === "Café da Tarde" 
-                            ? ["Café da Tarde", "Lanche / Chá da Tarde", "Lanche"] 
-                            : [currentPeriod];
-                          const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
-                          
-                          const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
-                          
-                          // Evitar bebidas alcoólicas no Café da Manhã, Café da Tarde e Ceia
-                          const isNonAlcoholicPeriod = ["Café da Manhã", "Café da Tarde", "Ceia"].includes(currentPeriod);
-                          if (isNonAlcoholicPeriod && isAlcoholicRecipe(recipe)) {
-                            return false;
-                          }
-                          const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
-                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia");
-                          const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
+                       {(() => {
+                         const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                         const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
 
-                          switch (courseType) {
-                            case "Entrada": 
-                              return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
-                            case "Sobremesa": 
-                              return isDessert;
-                            case "Bebida": 
-                              return isDrink && isExactMealMatch;
-                            case "Lanche": 
-                              return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
-                            case "Prato Principal": 
-                              if (isDrink || isDessert || isStarter || isSnack) {
-                                if (isExactMealMatch && !isDrink && !isDessert) return true;
-                                return false;
-                              }
-                              return true;
-                            default: return true;
-                          }
-                        });
+                         let filteredRecipes = availableRecipes.filter(recipe => {
+                           const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
+                           const rawMom = (recipe as any).momento;
+                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
+                           
+                           const normalizedPeriods = (currentPeriod === "Café da Manhã" || currentPeriod === "Café da Tarde" || currentPeriod === "Ceia")
+                             ? ["Café da Manhã", "Café da Tarde", "Ceia", "Lanche", "Lanche / Chá da Tarde", "Lanche da Tarde"]
+                             : (currentPeriod === "Almoço" || currentPeriod === "Jantar")
+                               ? ["Almoço", "Jantar", "Almoço / Jantar"]
+                               : [currentPeriod];
+                           const isExactMealMatch = m.some(val => normalizedPeriods.includes(val));
+                           
+                           const isDrink = p.includes("Bebidas") || m.includes("Bebidas");
+                           
+                           // Evitar bebidas alcoólicas no Café da Manhã, Café da Tarde e Ceia
+                           const isNonAlcoholicPeriod = ["Café da Manhã", "Café da Tarde", "Ceia"].includes(currentPeriod);
+                           if (isNonAlcoholicPeriod && isAlcoholicRecipe(recipe)) {
+                             return false;
+                           }
+                           const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
+                           const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia") || m.includes("Lanche") || m.includes("Lanche da Tarde");
+                           const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
 
-                        
-                        // Sort so approved recipes appear first
+                           switch (courseType) {
+                             case "Entrada": 
+                               return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
+                             case "Sobremesa": 
+                               return isDessert;
+                             case "Bebida": 
+                               return isDrink;
+                             case "Lanche": 
+                               return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
+                             case "Prato Principal": 
+                               if (isDrink || isDessert || isStarter || isSnack) {
+                                 if (isExactMealMatch && !isDrink && !isDessert) return true;
+                                 return false;
+                               }
+                               return true;
+                             default: return true;
+                           }
+                         });
+
+                        // Sort so approved recipes appear first (prioritizing exact period match)
                         filteredRecipes.sort((a, b) => {
-                          const aApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === a.id) ? 1 : 0;
-                          const bApp = activeProfile?.approvedRecipes?.some(r => r.recipeId === b.id) ? 1 : 0;
-                          return bApp - aApp;
+                          const getWeight = (recipe: Recipe) => {
+                            const entries = activeProfile?.approvedRecipes?.filter(r => r.recipeId === recipe.id) || [];
+                            if (entries.some(r => r.period === currentPeriod)) return 2;
+                            if (entries.length > 0) return 1;
+                            return 0;
+                          };
+                          return getWeight(b) - getWeight(a);
                         });
 
                         return (
