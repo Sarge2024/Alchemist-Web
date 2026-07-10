@@ -12,8 +12,9 @@ import FamilySection from "./components/FamilySection";
 import ConsumptionHistory from "./components/ConsumptionHistory";
 import { PlateScanner } from "./components/PlateScanner/PlateScanner";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, X, Share2 } from "lucide-react";
+import { Check, X, Share2, Loader2 } from "lucide-react";
 import { userService } from "./services/userService";
+import { suggestionService } from "./services/suggestionService";
 
 interface AppProps {
   initialProfiles?: Profile[];
@@ -61,6 +62,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
   );
   const [notificationCount, setNotificationCount] = useState<number>(1);
   const [sharedData, setSharedData] = useState<{title?: string, text?: string, url?: string} | null>(null);
+  const [isSubmittingSuggestion, setIsSubmittingSuggestion] = useState(false);
 
   // Check for Web Share Target incoming data
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function App({ initialProfiles, familyId }: AppProps) {
               </div>
               <div className="p-6 space-y-4 overflow-y-auto">
                 <p className="font-sans text-xs text-scientific-gray">
-                  Você compartilhou dados de outro aplicativo para o Alchymist. No momento, esses dados estão sendo recebidos na tela de Share Target.
+                  Você enviou um conteúdo de outro aplicativo para o Alchymist. Ao enviar para análise, a receita entrará na nossa base de triagem e logo estará disponível no seu cardápio oficial!
                 </p>
                 <div className="bg-surface-container rounded-lg p-4 space-y-3">
                   {sharedData.title && (
@@ -297,14 +299,29 @@ export default function App({ initialProfiles, familyId }: AppProps) {
               </div>
               <div className="p-4 border-t border-outline-variant/30 bg-surface">
                 <button
-                  onClick={() => {
-                     setSharedData(null);
-                     setActiveView(ActiveView.RECIPES);
-                     triggerGlobalToast("A implementação de importação será feita futuramente.");
+                  onClick={async () => {
+                     if (!sharedData) return;
+                     setIsSubmittingSuggestion(true);
+                     try {
+                       await suggestionService.submitSuggestion(sharedData, currentProfile.id, effectiveFamilyId);
+                       setSharedData(null);
+                       triggerGlobalToast("Receita enviada para análise da equipe!");
+                     } catch (err) {
+                       triggerGlobalToast("Falha ao enviar sugestão. Tente novamente.");
+                     } finally {
+                       setIsSubmittingSuggestion(false);
+                     }
                   }}
-                  className="w-full bg-primary text-white font-sans text-xs font-bold py-3 rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                  disabled={isSubmittingSuggestion}
+                  className="w-full bg-primary text-white font-sans text-xs font-bold py-3 rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Ir para Receitas
+                  {isSubmittingSuggestion ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Enviando...
+                    </>
+                  ) : (
+                    "Enviar para Análise"
+                  )}
                 </button>
               </div>
             </motion.div>

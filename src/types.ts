@@ -214,3 +214,14 @@ export interface IndustrialProduct {
   totalPackageSize?: number;
   totalPackageUnit?: string;
 }
+
+export interface RecipeSuggestion {
+  id?: string;
+  title?: string;
+  text?: string;
+  url?: string;
+  submittedBy: string;
+  familyId?: string;
+  createdAt: number;
+  status: 'pending_review' | 'approved' | 'rejected';
+}
