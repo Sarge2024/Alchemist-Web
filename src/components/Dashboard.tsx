@@ -57,6 +57,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                   const prot = course.recipe.nutrition?.protein || 0;
                   const carb = course.recipe.nutrition?.carbs || 0;
                   const fat = course.recipe.nutrition?.fat || 0;
+                  const estCost = course.recipe.estimatedCost || (cal * 0.024); // Fallback mock: 0.024 R$ per kcal
                   
                   pMacros.kcal += cal;
                   pMacros.protein += prot;
@@ -75,6 +76,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                       carbs: carb,
                       fat: fat
                     },
+                    estimatedCost: estCost,
                     time: meal.name,
                     status: "PENDING"
                   });
@@ -148,6 +150,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
           protein: meal.nutrition.protein,
           carbs: meal.nutrition.carbs,
           fat: meal.nutrition.fat,
+          cost: meal.estimatedCost,
           details: ""
         });
         
@@ -204,6 +207,17 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     fiber: getPcts(actualFiber, plannedFiber, goalFiber)
   };
 
+  // CMR Calculations
+  const consumedMealsCount = todayMeals.filter(m => m.status === 'CONSUMED_AS_PLANNED' || m.status === 'SUBSTITUTED').length;
+  const actualCost = todayMeals.reduce((acc, m) => {
+    if (m.status === 'CONSUMED_AS_PLANNED' || m.status === 'SUBSTITUTED') {
+      return acc + (m.estimatedCost || 0);
+    }
+    return acc;
+  }, 0);
+  const cmr = consumedMealsCount > 0 ? actualCost / consumedMealsCount : 0;
+  const isCmrGood = cmr <= 15.0; // Benchmark for good cost
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
@@ -256,9 +270,11 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Side: Weekly Gauges and Today's Protocol */}
-        <div className="lg:col-span-8 space-y-8">
+        {/* Main Dashboard Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          
+          {/* Daily Goals Panel */}
+          <div className="xl:col-span-2 space-y-6">
           {/* Analysis Gauges Card */}
           <div className="bg-lab-white border border-outline-variant/40 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
@@ -347,6 +363,39 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                 </span>
                 <span className="font-sans text-[10px] text-on-surface font-medium leading-tight">Meta: {pcts.fat.goalRaw}g</span>
                 <span className="font-sans text-[10px] text-scientific-gray leading-tight">Prev: {pcts.fat.plannedRaw}g | Real: {pcts.fat.actualRaw}g</span>
+              </div>
+            </div>
+
+            {/* Financial Analysis (UAN) */}
+            <div className="mt-8">
+              <h3 className="font-serif text-lg font-bold text-primary mb-4">Análise de Custos (UAN)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-lab-white border border-outline-variant/30 rounded-xl p-5 flex flex-col justify-center">
+                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Custo Total do Dia</span>
+                  <div className="flex items-end gap-2">
+                    <span className="font-serif text-3xl font-bold text-on-surface">
+                      R$ {actualCost.toFixed(2)}
+                    </span>
+                    <span className="font-sans text-xs text-scientific-gray mb-1">estimado</span>
+                  </div>
+                </div>
+
+                <div className={`border rounded-xl p-5 flex flex-col justify-center transition-colors ${
+                  isCmrGood ? 'bg-primary/5 border-primary/20' : 'bg-secondary/5 border-secondary/20'
+                }`}>
+                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">
+                    Custo Médio da Refeição (CMR)
+                  </span>
+                  <div className="flex items-end gap-2">
+                    <span className={`font-serif text-3xl font-bold ${isCmrGood ? 'text-primary' : 'text-secondary'}`}>
+                      R$ {cmr.toFixed(2)}
+                    </span>
+                    <span className="font-sans text-xs text-scientific-gray mb-1">/ refeição</span>
+                  </div>
+                  {!isCmrGood && cmr > 0 && (
+                    <span className="font-sans text-[10px] text-secondary mt-1 font-medium">Acima da meta (R$ 15.00)</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

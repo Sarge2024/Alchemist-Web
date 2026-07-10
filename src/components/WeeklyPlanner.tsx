@@ -157,12 +157,60 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   const handleSelectRecipe = async (recipe: Recipe) => {
     if (!weeklyPlan || !targetSlot) return;
     
+    // 1. Calcular o Peso Base da Receita Original
+    let baseWeight = 0;
+    let missingWeightData = false;
+    
+    if (recipe.ingredients && recipe.ingredients.length > 0) {
+      recipe.ingredients.forEach(ing => {
+        // Tenta usar o peso limpo, se não, tenta usar a quantidade (se for g ou ml)
+        if (ing.cleanWeight) {
+          baseWeight += ing.cleanWeight;
+        } else if (ing.quantity && (ing.unit.toLowerCase() === 'g' || ing.unit.toLowerCase() === 'ml')) {
+          baseWeight += ing.quantity;
+        } else {
+          missingWeightData = true;
+          // Fallback para ingredientes sem unidade de peso clara
+          baseWeight += 50; 
+        }
+      });
+    }
+    
+    // Se não tiver ingredientes, vamos estimar pelo peso da porção ou calorias
+    if (baseWeight === 0 && recipe.nutrition) {
+       // aproximação grotesca: 1g = 1.5 kcal para pratos mistos
+       baseWeight = recipe.nutrition.calories / 1.5;
+       if (baseWeight === 0) baseWeight = 450; 
+    }
+    
+    // 2. Definir Alvo e Calcular Fator
+    const targetWeight = activeProfile?.mealWeightPattern || 450;
+    const scaleFactor = targetWeight / baseWeight;
+    
+    // 3. Escalar a Receita
+    const scaledRecipe: Recipe = {
+      ...recipe,
+      nutrition: {
+        calories: Math.round((recipe.nutrition?.calories || 0) * scaleFactor),
+        protein: Math.round((recipe.nutrition?.protein || 0) * scaleFactor * 10) / 10,
+        carbs: Math.round((recipe.nutrition?.carbs || 0) * scaleFactor * 10) / 10,
+        fat: Math.round((recipe.nutrition?.fat || 0) * scaleFactor * 10) / 10,
+      },
+      estimatedCost: recipe.estimatedCost ? recipe.estimatedCost * scaleFactor : undefined,
+      ingredients: recipe.ingredients?.map(ing => ({
+        ...ing,
+        quantity: Math.round(ing.quantity * scaleFactor * 100) / 100,
+        cleanWeight: ing.cleanWeight ? ing.cleanWeight * scaleFactor : undefined,
+        grossWeight: ing.grossWeight ? ing.grossWeight * scaleFactor : undefined,
+      }))
+    };
+    
     const { dayIndex, mealIndex, courseIndex } = targetSlot;
     const newDays = [...weeklyPlan.days];
     const newMeals = [...newDays[dayIndex].meals];
     const newCourses = [...newMeals[mealIndex].courses];
     
-    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe };
+    newCourses[courseIndex] = { ...newCourses[courseIndex], recipe: scaledRecipe };
     newMeals[mealIndex] = { ...newMeals[mealIndex], courses: newCourses };
     newDays[dayIndex] = { ...newDays[dayIndex], meals: newMeals };
     
@@ -172,6 +220,14 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     
     setRecipeModalOpen(false);
     setTargetSlot(null);
+    
+    // 4. Notificar Usuário
+    if (missingWeightData) {
+      setToastMessage(`⚠️ Atenção: Receita ajustada para ${targetWeight}g, mas alguns ingredientes não possuíam unidade de peso. Verifique o cadastro.`);
+    } else {
+      setToastMessage(`✅ Receita perfeitamente dimensionada para o alvo de ${targetWeight}g do membro.`);
+    }
+    setTimeout(() => setToastMessage(null), 5000);
   };
   
   const removeFormula = async (dayIndex: number, mealIndex: number, courseIndex: number) => {
