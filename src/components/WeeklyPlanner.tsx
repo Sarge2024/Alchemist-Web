@@ -965,6 +965,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                               case "Sobremesa": 
                                 return isDessert;
                               case "Bebida": 
+                                if (isNonAlcoholicPeriod && !isExactMealMatch) return false;
                                 return isDrink;
                               case "Lanche": 
                                 return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
