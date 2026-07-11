@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { productService } from "../services/productService";
+import { apiService } from "../services/apiService";
 import { IndustrialProduct } from "../types";
 import { motion, AnimatePresence } from "motion/react";
-import { Camera, X, Package, Loader2, AlertTriangle, Check, Keyboard, ArrowRight } from "lucide-react";
+import { Camera, X, Package, Loader2, AlertTriangle, Check, Keyboard, ArrowRight, Upload } from "lucide-react";
 
 interface ProductScannerProps {
   onProductRegistered: (product: IndustrialProduct) => void;
@@ -40,6 +41,8 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
   const [productVolume, setProductVolume] = useState("");
   const [productVolumeUnit, setProductVolumeUnit] = useState("g");
   const [productImageUrl, setProductImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -166,6 +169,27 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
       } finally {
         setSaving(false);
       }
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    setErrorMsg("");
+    try {
+      const result = await apiService.uploadImage(file);
+      if (result.success && result.imageUrl) {
+        setProductImageUrl(result.imageUrl);
+      } else {
+        setErrorMsg(result.error || "Erro ao fazer upload da imagem.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Erro de conexão ao enviar imagem.");
+    } finally {
+      setUploadingImage(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -427,9 +451,53 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">URL da Imagem (Opcional)</label>
-                    <input type="url" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)}
-                      placeholder="https://..." className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
+                    <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Imagem do Produto (Opcional)</label>
+                    <div className="flex gap-4 items-center">
+                      {productImageUrl ? (
+                        <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-outline-variant/30 group">
+                          <img src={productImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setProductImageUrl("")}
+                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingImage}
+                          className="w-20 h-20 rounded-xl border-2 border-dashed border-outline-variant/50 flex flex-col items-center justify-center text-scientific-gray hover:border-primary hover:text-primary transition-all bg-lab-white disabled:opacity-50"
+                        >
+                          {uploadingImage ? <Loader2 className="w-6 h-6 mb-1 animate-spin" /> : <Camera className="w-6 h-6 mb-1" />}
+                          <span className="text-[9px] font-bold uppercase">{uploadingImage ? "Enviando" : "Foto"}</span>
+                        </button>
+                      )}
+                      <div className="flex-1 space-y-2">
+                        <button
+                          type="button"
+                          disabled={uploadingImage}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3 py-1.5 border border-outline-variant/40 rounded-lg text-xs font-bold text-scientific-gray hover:bg-lab-white transition-all flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          Tirar ou Escolher Foto
+                        </button>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleImageUpload}
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                        />
+                        <p className="text-[9px] text-scientific-gray">
+                          Tire uma foto direta ou selecione um arquivo. Ela será salva na nuvem.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Preço Total Pago (R$)</label>
@@ -534,9 +602,53 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">URL da Imagem</label>
-                  <input type="url" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)}
-                    placeholder="https://..." className="w-full px-3 py-2 bg-lab-white border border-outline-variant/40 rounded-lg text-sm outline-none focus:border-primary" />
+                  <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">Imagem do Produto (Opcional)</label>
+                  <div className="flex gap-4 items-center">
+                    {productImageUrl ? (
+                      <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-outline-variant/30 group">
+                        <img src={productImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setProductImageUrl("")}
+                          className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        className="w-20 h-20 rounded-xl border-2 border-dashed border-outline-variant/50 flex flex-col items-center justify-center text-scientific-gray hover:border-primary hover:text-primary transition-all bg-lab-white disabled:opacity-50"
+                      >
+                        {uploadingImage ? <Loader2 className="w-6 h-6 mb-1 animate-spin" /> : <Camera className="w-6 h-6 mb-1" />}
+                        <span className="text-[9px] font-bold uppercase">{uploadingImage ? "Enviando" : "Foto"}</span>
+                      </button>
+                    )}
+                    <div className="flex-1 space-y-2">
+                      <button
+                        type="button"
+                        disabled={uploadingImage}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 border border-outline-variant/40 rounded-lg text-xs font-bold text-scientific-gray hover:bg-lab-white transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Tirar ou Escolher Foto
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageUpload}
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                      />
+                      <p className="text-[9px] text-scientific-gray">
+                        Tire uma foto direta ou selecione um arquivo. Ela será salva na nuvem.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="border-t border-outline-variant/20 pt-3">

@@ -131,5 +131,30 @@ export const apiService = {
     const res = await fetch(`${API_BASE}/categories`, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro ao buscar categorias: ${res.statusText}`);
     return res.json();
+  },
+
+  async uploadImage(file: File, firebaseToken?: string): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const headers: Record<string, string> = {};
+    if (firebaseToken) {
+      headers['Authorization'] = `Bearer ${firebaseToken}`;
+    }
+    if (API_KEY && API_BASE !== '/api') {
+      headers['x-api-key'] = API_KEY;
+    }
+
+    const url = `${API_BASE}/upload`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Erro no upload: ${res.statusText}`);
+    }
+    return res.json();
   }
 };
