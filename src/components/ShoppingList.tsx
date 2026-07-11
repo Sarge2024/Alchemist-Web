@@ -306,52 +306,73 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
 
       <section className="bg-lab-white/40 border border-outline-variant/30 rounded-xl p-6 shadow-sm">
         <div className="space-y-3">
-          <AnimatePresence>
-            {[...items].sort((a, b) => a.category.localeCompare(b.category)).map((item) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                className="flex items-center justify-between py-2 border-b border-outline-variant/10 group last:border-0"
-              >
-                <div
-                  onClick={() => toggleItem(item.id)}
-                  className="flex items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
-                >
-                  <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors flex-shrink-0">
-                    {item.completed ? (
-                      <div className="w-5 h-5 rounded bg-secondary flex items-center justify-center text-white">
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </div>
-                    ) : (
-                      <div className="w-5 h-5 rounded border border-outline-variant/80 bg-white" />
-                    )}
-                  </button>
-                  <div className="grid grid-cols-[1fr_auto] items-center gap-4 flex-1 pr-4">
-                    <span
-                      className={`font-sans text-sm font-medium leading-tight truncate ${
-                        item.completed ? "text-scientific-gray line-through" : "text-primary"
-                      }`}
-                    >
-                      {item.name}
-                    </span>
-                    {item.quantity && (
-                      <span className={`font-sans text-xs w-20 text-right ${item.completed ? "text-scientific-gray/60" : "text-scientific-gray"}`}>
-                        {item.quantity}
-                      </span>
-                    )}
-                  </div>
+          <div className="space-y-6">
+            {Object.entries(
+              [...items]
+                .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
+                .reduce((acc, item) => {
+                  if (!acc[item.category]) acc[item.category] = [];
+                  acc[item.category].push(item);
+                  return acc;
+                }, {} as Record<string, typeof items>)
+            ).map(([category, catItems]) => (
+              <div key={category}>
+                <h3 className="font-sans text-xs font-bold text-primary uppercase tracking-wider mb-2 pb-1 border-b border-outline-variant/30 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                  {category}
+                </h3>
+                <div className="space-y-0 pl-3 border-l border-outline-variant/20">
+                  <AnimatePresence>
+                    {catItems.map((item) => (
+                      <motion.div
+                        key={item.id}
+                        layout
+                        initial={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        className="flex items-center justify-between py-2 border-b border-outline-variant/10 group last:border-0"
+                      >
+                        <div
+                          onClick={() => toggleItem(item.id)}
+                          className="flex items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
+                        >
+                          <button className="focus:outline-none text-on-surface-variant hover:text-primary transition-colors flex-shrink-0">
+                            {item.completed ? (
+                              <div className="w-5 h-5 rounded bg-secondary flex items-center justify-center text-white">
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              </div>
+                            ) : (
+                              <div className="w-5 h-5 rounded border border-outline-variant/80 bg-white" />
+                            )}
+                          </button>
+                          <div className="grid grid-cols-[1fr_auto] items-center gap-4 flex-1 pr-4">
+                            <span
+                              className={`font-sans text-sm font-medium leading-tight truncate ${
+                                item.completed ? "text-scientific-gray line-through" : "text-primary"
+                              }`}
+                            >
+                              {item.name}
+                            </span>
+                            {item.quantity && (
+                              <span className={`font-sans text-xs w-20 text-right ${item.completed ? "text-scientific-gray/60" : "text-scientific-gray"}`}>
+                                {item.quantity}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteItem(item.id)}
+                          className="text-outline hover:text-error transition-colors focus:outline-none flex-shrink-0 p-1"
+                          title="Remover item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
-                <button
-                  onClick={() => deleteItem(item.id)}
-                  className="text-outline hover:text-error transition-colors focus:outline-none flex-shrink-0 p-1"
-                  title="Remover item"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </motion.div>
+              </div>
             ))}
-          </AnimatePresence>
+          </div>
           {items.length === 0 && (
             <p className="font-sans text-sm text-scientific-gray italic py-4 text-center">A lista de compras está vazia.</p>
           )}

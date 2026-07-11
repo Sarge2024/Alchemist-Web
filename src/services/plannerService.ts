@@ -44,6 +44,15 @@ export const plannerService = {
             ]
           }));
         }
+
+        // Migração para adicionar Sábado e Domingo em planos antigos (de 5 dias)
+        if (plan.days.length === 5) {
+          console.warn("Plano semanal antigo com apenas 5 dias detectado. Adicionando final de semana...");
+          const emptyCurrent = this.generateEmptyPlan(plan.familyId, plan.profileId, weekId);
+          plan.days.push(emptyCurrent.days[5]);
+          plan.days.push(emptyCurrent.days[6]);
+        }
+
         return plan;
       }
       return null;
