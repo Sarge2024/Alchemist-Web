@@ -80,6 +80,14 @@ export interface RecipeIngredient {
   cookedWeight?: number;
   correctionFactor?: number;
   cookingFactor?: number;
+  category?: string;
+  subcategory?: string;
+}
+
+export interface PreparationStep {
+  descricao: string;
+  preparo: string;
+  tempo: number;
 }
 
 export interface Recipe {
@@ -94,6 +102,7 @@ export interface Recipe {
   prepTime?: string;
   nutrition: RecipeNutrition;
   ingredients?: RecipeIngredient[];
+  preparationSteps?: PreparationStep[];
   defaultDurabilityDays?: number;
   estimatedCost?: number;
 }

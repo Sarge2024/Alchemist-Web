@@ -12,7 +12,11 @@ export const mockRecipes = [
       { id: "ing-2", name: "Espinafre", amount: 50, unit: "g" },
       { id: "ing-3", name: "Queijo Cottage", amount: 30, unit: "g" }
     ],
-    instructions: ["Bata os ovos.", "Adicione o espinafre e o queijo.", "Cozinhe em fogo baixo até dourar."]
+    preparationSteps: [
+      { descricao: "Bata os ovos.", preparo: "Tigela", tempo: 2 },
+      { descricao: "Adicione o espinafre e o queijo.", preparo: "Tigela", tempo: 3 },
+      { descricao: "Cozinhe em fogo baixo até dourar.", preparo: "Frigideira", tempo: 10 }
+    ]
   },
   {
     id: "mock-2",
@@ -26,7 +30,11 @@ export const mockRecipes = [
       { id: "ing-4", name: "Peito de Frango", amount: 150, unit: "g" },
       { id: "ing-5", name: "Batata Doce", amount: 200, unit: "g" }
     ],
-    instructions: ["Grelhe o frango.", "Cozinhe a batata doce.", "Sirva."]
+    preparationSteps: [
+      { descricao: "Grelhe o frango.", preparo: "Grelha", tempo: 15 },
+      { descricao: "Cozinhe a batata doce.", preparo: "Panela", tempo: 15 },
+      { descricao: "Sirva.", preparo: "Prato", tempo: 0 }
+    ]
   },
   {
     id: "mock-3",
@@ -40,6 +48,10 @@ export const mockRecipes = [
       { id: "ing-6", name: "Filé de Salmão", amount: 180, unit: "g" },
       { id: "ing-7", name: "Aspargos", amount: 100, unit: "g" }
     ],
-    instructions: ["Asse o salmão por 20min.", "Grelhe os aspargos.", "Sirva."]
+    preparationSteps: [
+      { descricao: "Asse o salmão por 20min.", preparo: "Forno", tempo: 20 },
+      { descricao: "Grelhe os aspargos.", preparo: "Grelha", tempo: 10 },
+      { descricao: "Sirva.", preparo: "Prato", tempo: 0 }
+    ]
   }
 ];
