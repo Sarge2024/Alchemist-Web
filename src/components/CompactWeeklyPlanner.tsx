@@ -6,6 +6,7 @@ import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
 import { userService } from "../services/userService";
 import { productService } from "../services/productService";
+import { extractNutrition } from "../utils/nutritionHelper";
 
 const ProductScanner = lazy(() => import("./ProductScanner"));
 
@@ -616,10 +617,17 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                                       {isApproved && <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-bold uppercase shrink-0">Preferida</span>}
                                     </div>
                                     <span className="font-sans text-[10px] text-scientific-gray uppercase flex gap-2 flex-wrap mt-0.5">
-                                      <span>🔥 {recipe.nutrition?.calories || 0} kcal</span>
-                                      <span>• 🥩 {recipe.nutrition?.protein || 0}g</span>
-                                      <span>• 🌾 {recipe.nutrition?.carbs || 0}g</span>
-                                      <span>• 🥑 {recipe.nutrition?.fat || 0}g</span>
+                                      {(() => {
+                                        const n = extractNutrition(recipe);
+                                        return (
+                                          <>
+                                            <span>🔥 {n.calories} kcal</span>
+                                            <span>• 🥩 {n.protein}g</span>
+                                            <span>• 🌾 {n.carbs}g</span>
+                                            <span>• 🥑 {n.fat}g</span>
+                                          </>
+                                        );
+                                      })()}
                                     </span>
                                   </div>
                                 </div>

@@ -51,6 +51,31 @@ export const apiService = {
     return headers;
   },
 
+  // Normaliza uma receita da API para o formato Recipe do frontend
+  normalizeRecipe(raw: any): Recipe {
+    // A API retorna nutrition como { total_nutrition: { calories, protein, carbs, fat }, details: [...] }
+    // O frontend espera nutrition como { calories, protein, carbs, fat } diretamente
+    const tn = raw.nutrition?.total_nutrition || raw.nutrition || {};
+    return {
+      id: raw.id,
+      title: raw.title,
+      description: raw.description || '',
+      image: raw.image || '',
+      category: raw.category || raw.tipo_prato || '',
+      difficulty: raw.difficulty || '',
+      prepTime: raw.prepTime || '',
+      nutrition: {
+        calories: Number(tn.calories) || 0,
+        protein: Number(tn.protein) || 0,
+        carbs: Number(tn.carbs) || 0,
+        fat: Number(tn.fat) || 0,
+      },
+      ingredients: raw.ingredients || [],
+      defaultDurabilityDays: raw.defaultDurabilityDays,
+      estimatedCost: raw.estimatedCost || (raw.custo_estimado ? parseFloat(raw.custo_estimado) : undefined),
+    };
+  },
+
   async getRecipes(params?: { 
     page?: number; 
     limit?: number; 
@@ -69,13 +94,20 @@ export const apiService = {
     
     const res = await fetch(url, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro ao buscar receitas: ${res.statusText}`);
-    return res.json();
+    const json = await res.json();
+    
+    // Normaliza todas as receitas para o formato correto do frontend
+    return {
+      ...json,
+      data: (json.data || []).map((r: any) => this.normalizeRecipe(r)),
+    };
   },
 
   async getRecipeById(id: string, firebaseToken?: string): Promise<{ data: Recipe }> {
     const res = await fetch(`${API_BASE}/recipes/${id}`, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro ao buscar receita ${id}: ${res.statusText}`);
-    return res.json();
+    const json = await res.json();
+    return { ...json, data: this.normalizeRecipe(json.data || json) };
   },
 
   async searchRecipes(query: string, limit = 10, firebaseToken?: string): Promise<{ data: Recipe[], total: number }> {
@@ -86,7 +118,11 @@ export const apiService = {
       : `${API_BASE}/search?${params.toString()}`;
     const res = await fetch(url, { headers: this.getHeaders(firebaseToken) });
     if (!res.ok) throw new Error(`Erro na busca: ${res.statusText}`);
-    return res.json();
+    const json = await res.json();
+    return {
+      ...json,
+      data: (json.data || []).map((r: any) => this.normalizeRecipe(r)),
+    };
   },
 
   async getCategories(firebaseToken?: string): Promise<RecipeCategories> {

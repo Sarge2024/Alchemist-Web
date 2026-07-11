@@ -6,6 +6,7 @@ import { plannerService } from "../services/plannerService";
 import { apiService } from "../services/apiService";
 import { userService } from "../services/userService";
 import { productService } from "../services/productService";
+import { extractNutrition } from "../utils/nutritionHelper";
 
 const ProductScanner = lazy(() => import("./ProductScanner"));
 
@@ -217,7 +218,8 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     }
     
     if (baseWeight === 0 && recipe.nutrition) {
-       baseWeight = recipe.nutrition.calories / 1.5;
+       const recipeN = extractNutrition(recipe);
+       baseWeight = recipeN.calories / 1.5;
        if (baseWeight === 0) baseWeight = 450; 
     }
     
@@ -232,13 +234,14 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
       const targetWeight = member.mealWeightPattern || 450;
       const scaleFactor = targetWeight / baseWeight;
       
+      const origN = extractNutrition(recipe);
       const scaledRecipe: Recipe = {
         ...recipe,
         nutrition: {
-          calories: Math.round((recipe.nutrition?.calories || 0) * scaleFactor),
-          protein: Math.round((recipe.nutrition?.protein || 0) * scaleFactor * 10) / 10,
-          carbs: Math.round((recipe.nutrition?.carbs || 0) * scaleFactor * 10) / 10,
-          fat: Math.round((recipe.nutrition?.fat || 0) * scaleFactor * 10) / 10,
+          calories: Math.round(origN.calories * scaleFactor),
+          protein: Math.round(origN.protein * scaleFactor * 10) / 10,
+          carbs: Math.round(origN.carbs * scaleFactor * 10) / 10,
+          fat: Math.round(origN.fat * scaleFactor * 10) / 10,
         },
         estimatedCost: recipe.estimatedCost ? recipe.estimatedCost * scaleFactor : undefined,
         ingredients: recipe.ingredients?.map(ing => ({
@@ -428,10 +431,11 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
   
   weeklyPlan.days[selectedDayIndex].meals.forEach(meal => {
     meal.courses.forEach(course => {
-      if (course.recipe && course.recipe.nutrition) {
-        dailyCalories += (course.recipe.nutrition.calories || 0);
-        dailyProtein += (course.recipe.nutrition.protein || 0);
-        dailyCarbs += (course.recipe.nutrition.carbs || 0);
+      if (course.recipe) {
+        const n = extractNutrition(course.recipe);
+        dailyCalories += n.calories;
+        dailyProtein += n.protein;
+        dailyCarbs += n.carbs;
       }
     });
   });
@@ -648,7 +652,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                         <div className="p-3 pt-0 flex flex-col gap-2 border-t border-outline-variant/10 mt-auto">
                           <div className="flex justify-between items-center w-full mt-2">
                             <span className="font-serif text-xs font-bold text-scientific-gray">
-                              {Math.round((course.recipe.nutrition?.calories || 0) * (weeklyPlan.portionScale / 2))} kcal
+                              {Math.round(extractNutrition(course.recipe).calories * (weeklyPlan.portionScale / 2))} kcal
                             </span>
                             {!isDayClosed && (
                               <div className="flex gap-3">
@@ -730,20 +734,23 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {availableRecipes
               .filter(recipe => {
+                const rn = extractNutrition(recipe);
                 if (dailyProtein < targetProtein) {
-                  return recipe.category?.includes("ALTA PROTEÍNA") || (recipe.nutrition?.protein && recipe.nutrition.protein > 20);
+                  return recipe.category?.includes("ALTA PROTEÍNA") || rn.protein > 20;
                 }
-                return recipe.nutrition?.calories && recipe.nutrition.calories > 200;
+                return rn.calories > 200;
               })
               .slice(0, 3)
-              .map(recipe => (
+              .map(recipe => {
+                const rn = extractNutrition(recipe);
+                return (
                 <div key={recipe.id} className="bg-lab-white p-3 border border-outline-variant/30 rounded-xl flex gap-3 items-center justify-between">
                   <div className="flex gap-3 items-center min-w-0 flex-1">
                     <img src={recipe.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80"} alt={recipe.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                     <div className="min-w-0 flex-1">
                       <h5 className="font-sans text-xs font-bold text-primary truncate">{recipe.title}</h5>
                       <span className="font-sans text-[9px] text-scientific-gray block">
-                        {recipe.nutrition?.calories} kcal • {recipe.nutrition?.protein}g Proteína
+                        {rn.calories} kcal • {rn.protein}g Proteína
                       </span>
                     </div>
                   </div>
@@ -782,7 +789,8 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
-              ))}
+              );
+              })}
           </div>
         </section>
       )}

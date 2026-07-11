@@ -61,8 +61,20 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     const d = today.getDay();
     const currentDayIndex = d === 0 ? 6 : d - 1; // 0 is Sunday -> index 6
     
-    const planRef = doc(db, `families/${familyId}/weeklyPlans`, `${activeProfileId}_${weekId}`);
-    const logRef = doc(db, `families/${familyId}/consumptionLogs`, `${activeProfileId}_${dateId}`);
+    const planDocId = `${activeProfileId}_${weekId}`;
+    const logDocId = `${activeProfileId}_${dateId}`;
+    
+    console.log('[Dashboard] === INICIALIZANDO LISTENERS ===');
+    console.log('[Dashboard] familyId:', familyId);
+    console.log('[Dashboard] activeProfileId:', activeProfileId);
+    console.log('[Dashboard] weekId:', weekId);
+    console.log('[Dashboard] dateId:', dateId);
+    console.log('[Dashboard] currentDayIndex:', currentDayIndex, '(0=Seg..6=Dom)');
+    console.log('[Dashboard] planDocPath:', `families/${familyId}/weeklyPlans/${planDocId}`);
+    console.log('[Dashboard] logDocPath:', `families/${familyId}/consumptionLogs/${logDocId}`);
+    
+    const planRef = doc(db, `families/${familyId}/weeklyPlans`, planDocId);
+    const logRef = doc(db, `families/${familyId}/consumptionLogs`, logDocId);
 
     let currentPlan: any = null;
     let currentLog: any = null;
@@ -76,17 +88,25 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
       
       if (currentPlan && currentPlan.days) {
         const todayPlan = currentPlan.days[currentDayIndex];
+        console.log('[Dashboard] todayPlan (days[' + currentDayIndex + ']):', todayPlan ? todayPlan.dayName : 'NULL/UNDEFINED');
+        console.log('[Dashboard] todayPlan.meals count:', todayPlan?.meals?.length || 0);
+        
         if (todayPlan && todayPlan.meals) {
           todayPlan.meals.forEach((meal: any, mIdx: number) => {
             if (!meal.courses) return;
             meal.courses.forEach((course: any, cIdx: number) => {
               if (course.recipe) {
                 const rId = `planned-${mIdx}-${cIdx}`;
-                const cal = course.recipe.nutrition?.calories || 0;
-                const prot = course.recipe.nutrition?.protein || 0;
-                const carb = course.recipe.nutrition?.carbs || 0;
-                const fat = course.recipe.nutrition?.fat || 0;
-                const estCost = course.recipe.estimatedCost || (cal * 0.024); // Fallback mock
+                // Handle both flat format (nutrition.calories) and nested API format (nutrition.total_nutrition.calories)
+                const rawNutrition = course.recipe.nutrition || {};
+                const tn = rawNutrition.total_nutrition || rawNutrition;
+                const cal = Number(tn.calories) || 0;
+                const prot = Number(tn.protein) || 0;
+                const carb = Number(tn.carbs) || 0;
+                const fat = Number(tn.fat) || 0;
+                const estCost = course.recipe.estimatedCost || (course.recipe.custo_estimado ? parseFloat(course.recipe.custo_estimado) : 0) || (cal * 0.024); // Fallback mock
+                
+                console.log(`[Dashboard] Receita encontrada: "${course.recipe.title}" em ${meal.name} | cal:${cal} prot:${prot} carb:${carb} fat:${fat}`);
                 
                 pMacros.kcal += cal;
                 pMacros.protein += prot;
@@ -121,6 +141,8 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
             });
           });
         }
+      } else {
+        console.log('[Dashboard] currentPlan é null ou sem days. currentPlan:', currentPlan ? 'exists but no .days' : 'NULL');
       }
       
       if (currentLog) {
@@ -131,6 +153,11 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         aFiber = (aMacros.carbs * 0.1);
       }
       
+      console.log('[Dashboard] === RESULTADO ===');
+      console.log('[Dashboard] Previsto:', JSON.stringify(pMacros));
+      console.log('[Dashboard] Realizado:', JSON.stringify(aMacros));
+      console.log('[Dashboard] Refeições encontradas:', plannedMealsData.length);
+      
       setPlannedMacros(pMacros);
       setActualMacros(aMacros);
       setPlannedFiber(pFiber);
@@ -140,26 +167,33 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     };
 
     const unsubPlan = onSnapshot(planRef, (docSnap) => {
+      console.log('[Dashboard] onSnapshot PLAN disparou. exists:', docSnap.exists());
       if (docSnap.exists()) {
         currentPlan = docSnap.data();
+        console.log('[Dashboard] Plan data keys:', Object.keys(currentPlan));
+        console.log('[Dashboard] Plan.days length:', currentPlan.days?.length);
       } else {
         currentPlan = null;
+        console.log('[Dashboard] Plan NÃO EXISTE no Firestore. Verifique o doc ID:', planDocId);
       }
       updateDashboard();
     }, (error) => {
-      console.error("Erro ao buscar plano semanal:", error);
+      console.error("[Dashboard] Erro no onSnapshot PLAN:", error);
       setLoading(false);
     });
 
     const unsubLog = onSnapshot(logRef, (docSnap) => {
+      console.log('[Dashboard] onSnapshot LOG disparou. exists:', docSnap.exists());
       if (docSnap.exists()) {
         currentLog = docSnap.data();
+        console.log('[Dashboard] Log entries count:', currentLog.entries?.length);
+        console.log('[Dashboard] Log totals: cal=' + currentLog.totalCalories + ' prot=' + currentLog.totalProtein + ' carb=' + currentLog.totalCarbs + ' fat=' + currentLog.totalFat);
       } else {
         currentLog = null;
       }
       updateDashboard();
     }, (error) => {
-      console.error("Erro ao buscar consumo:", error);
+      console.error("[Dashboard] Erro no onSnapshot LOG:", error);
       setLoading(false);
     });
 
@@ -170,13 +204,44 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   }, [familyId, activeProfileId]);
 
   const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING", pct: number = 100) => {
+    const meal = todayMeals.find(m => m.id === mealId);
+    if (!meal) return;
+
     // Optimistic UI update
     setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, status } : m));
+    setActualMacros(prev => {
+      let next = { ...prev };
+      const oldStatus = meal.status;
+      
+      // Revert old status contribution (assuming 100% for simplicity in optimistic revert, server will correct it)
+      if (oldStatus === "CONSUMED_AS_PLANNED" || oldStatus === "SUBSTITUTED") {
+          next.kcal = Math.max(0, next.kcal - meal.nutrition.calories);
+          next.protein = Math.max(0, next.protein - meal.nutrition.protein);
+          next.carbs = Math.max(0, next.carbs - meal.nutrition.carbs);
+          next.fat = Math.max(0, next.fat - meal.nutrition.fat);
+      }
+      
+      // Apply new status contribution
+      if (status === "CONSUMED_AS_PLANNED" || status === "SUBSTITUTED") {
+          const pctDecimal = pct / 100;
+          next.kcal += meal.nutrition.calories * pctDecimal;
+          next.protein += meal.nutrition.protein * pctDecimal;
+          next.carbs += meal.nutrition.carbs * pctDecimal;
+          next.fat += meal.nutrition.fat * pctDecimal;
+      }
+      
+      return next;
+    });
     
     // Save to backend
     if (familyId && activeProfileId) {
       try {
-        const dateId = consumptionService.formatDateId(new Date());
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const dateId = `${year}-${month}-${day}`;
+        
         let logDoc = await consumptionService.getDayLogs(familyId, activeProfileId, dateId);
         
         if (!logDoc) {
