@@ -62,6 +62,8 @@ export const apiService = {
       description: raw.description || '',
       image: raw.image || '',
       category: raw.category || raw.tipo_prato || '',
+      momento: raw.momento,
+      base_alimento: raw.base_alimento,
       difficulty: raw.difficulty || '',
       prepTime: raw.prepTime || '',
       nutrition: {

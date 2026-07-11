@@ -138,22 +138,41 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
     }
   };
 
-  const handleFinalConfirm = () => {
+  const handleFinalConfirm = async () => {
     if (foundProduct) {
-      const finalProduct = {
-        ...foundProduct,
-        image: productImageUrl.trim() || foundProduct.image,
-        price: parseFloat(productPrice) || undefined,
-        totalPackageSize: parseFloat(productVolume) || undefined,
-        totalPackageUnit: productVolumeUnit
-      };
-      onProductRegistered(finalProduct);
+      setSaving(true);
+      setErrorMsg("");
+      try {
+        const updateData = {
+          price: parseFloat(productPrice) || undefined,
+          totalPackageSize: parseFloat(productVolume) || undefined,
+          totalPackageUnit: productVolumeUnit,
+          imageUrl: productImageUrl.trim() || undefined
+        };
+        const result = await productService.updateProduct(foundProduct.id, updateData);
+        if (result.success && result.product) {
+          onProductRegistered(result.product);
+          // Reset state for next scan
+          setFoundProduct(null);
+          setProductPrice("");
+          setProductVolume("");
+          setProductImageUrl("");
+          setStep("scanning");
+        } else {
+          setErrorMsg(result.error || "Erro ao salvar informações do produto.");
+        }
+      } catch (e) {
+        setErrorMsg("Erro de conexão ao salvar informações do produto.");
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   const handleManualSubmit = async () => {
     if (!manualName.trim()) return;
     setSaving(true);
+    setErrorMsg("");
     try {
       const result = await productService.registerProduct({
         name: manualName.trim(),
@@ -172,6 +191,18 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
       });
       if (result.success && result.product) {
         onProductRegistered(result.product);
+        // Reset state for next manual insert
+        setManualName("");
+        setManualBrand("");
+        setManualBarcode("");
+        setManualCalories("");
+        setManualProtein("");
+        setManualCarbs("");
+        setManualFat("");
+        setProductPrice("");
+        setProductVolume("");
+        setProductImageUrl("");
+        setStep("scanning");
       } else {
         setErrorMsg(result.error || "Erro ao cadastrar produto.");
       }
@@ -388,6 +419,12 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
                   </p>
                 </div>
                 
+                {errorMsg && (
+                  <div className="bg-red-50 text-red-700 text-xs font-bold p-2.5 rounded-lg border border-red-200 mb-4">
+                    {errorMsg}
+                  </div>
+                )}
+                
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[10px] font-bold text-scientific-gray uppercase tracking-wider mb-1">URL da Imagem (Opcional)</label>
@@ -422,17 +459,19 @@ export default function ProductScanner({ onProductRegistered, onClose }: Product
 
                 <div className="flex gap-3 mt-6">
                   <button
-                    onClick={() => setStep("found")}
-                    className="flex-1 py-2.5 border border-outline-variant/40 text-scientific-gray rounded-lg font-sans text-xs font-bold hover:bg-lab-white transition-all"
+                    disabled={saving}
+                    onClick={() => { setErrorMsg(""); setStep("found"); }}
+                    className="flex-1 py-2.5 border border-outline-variant/40 text-scientific-gray rounded-lg font-sans text-xs font-bold hover:bg-lab-white transition-all disabled:opacity-40"
                   >
                     Voltar
                   </button>
                   <button
+                    disabled={saving}
                     onClick={handleFinalConfirm}
-                    className="flex-1 py-2.5 bg-primary text-white rounded-lg font-sans text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 bg-primary text-white rounded-lg font-sans text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
                   >
-                    <Check className="w-4 h-4" />
-                    Finalizar Cadastro
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    {saving ? "Salvando..." : "Finalizar Cadastro"}
                   </button>
                 </div>
               </motion.div>

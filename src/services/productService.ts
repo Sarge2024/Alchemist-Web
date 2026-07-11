@@ -79,6 +79,23 @@ export const productService = {
   },
 
   /**
+   * Atualiza informações (preço, volume) de um produto existente
+   */
+  async updateProduct(id: string, data: {
+    price?: number;
+    totalPackageSize?: number;
+    totalPackageUnit?: string;
+    imageUrl?: string;
+  }): Promise<{ success: boolean; product?: IndustrialProduct; error?: string }> {
+    const response = await fetch(`${API_BASE}/${id}`, {
+      method: "PATCH",
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  /**
    * Lista produtos cadastrados com busca e paginação
    */
   async searchProducts(

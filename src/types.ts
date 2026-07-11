@@ -87,7 +87,9 @@ export interface Recipe {
   title: string;
   description: string;
   image: string;
-  category: string;
+  category: string | string[];
+  momento?: string | string[];
+  base_alimento?: string | string[];
   difficulty?: string;
   prepTime?: string;
   nutrition: RecipeNutrition;

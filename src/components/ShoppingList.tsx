@@ -323,7 +323,7 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                 </h3>
                 <div className="space-y-0 pl-3 border-l border-outline-variant/20">
                   <AnimatePresence>
-                    {catItems.map((item) => (
+                    {(catItems as ShoppingItem[]).map((item) => (
                       <motion.div
                         key={item.id}
                         layout
