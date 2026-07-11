@@ -16,7 +16,7 @@ const getApiBase = () => {
     return 'https://dishalchemists.com/api/v1/products';
   }
   
-  return '/api/products';
+  return '/api/v1/products';
 };
 
 const getApiKey = () => {
