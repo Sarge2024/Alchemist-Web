@@ -10,6 +10,7 @@ Este documento reúne o mapeamento completo da arquitetura, funcionalidades, int
 | :---   | :---       | :---        | :---                     |
 | **1.0**| 08/07/2026 | Antigravity | Inicialização do documento de especificações contendo o levantamento arquitetural, funcional e de integrações. Inclusão da especificação do Scanner de Pratos Multimodal. |
 | **1.1**| 09/07/2026 | Antigravity | Refatoração arquitetural do Backend (modularização de rotas Express), otimização de performance (Caching, Batching) e definição da integração de ingredientes via PostgreSQL do Dish Alchemists. |
+| **1.2**| 17/07/2026 | Antigravity | Atualização do BFF (server.ts) com remoção de respostas em mock (fail fast em produção). Implementação de Fallback Local no Motor Nutricional via Supabase. Aprimoramento da engine de normalização da Lista de Compras utilizando expressões regulares para capturar variações linguísticas nas unidades de medida e realizar agrupamento preciso. Adição de campo de busca integrado para seleção rápida de receitas nos Planners Semanais. |
 
 ---
 
@@ -94,6 +95,7 @@ A aplicação está desenhada sob uma arquitetura de **BFF (Backend For Frontend
     *   Sincronização com o estado do planejador semanal (adicionar receitas gera ingredientes na lista).
     *   Adição manual de itens extras.
     *   Checklist interativo de progresso.
+    *   **Motor de Agrupamento Agressivo:** Implementação de parsing por Expressões Regulares (RegEx) para identificar unidades complexas de medidas (ex: "xícaras (chá)", "dentes") e aglutiná-las em unidades padrão (L, Kg, Unid), garantindo a somatória perfeita sem duplicações na UI final.
 
 ### 3.5. Scanner de Prato Calibrado (Plate Scanner)
 *   **Objetivo:** Estimar o impacto nutricional de pratos consumidos fora de casa.
