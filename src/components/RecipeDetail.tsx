@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Clock, Flame, Info, CheckCircle2, ChefHat, Scale } from "lucide-react";
+import { ArrowLeft, Clock, Flame, Info, CheckCircle2, ChefHat, Scale, ArrowRightLeft } from "lucide-react";
 import { apiService } from "../services/apiService";
-import { Recipe } from "../types";
+import { Recipe, RecipeIngredient } from "../types";
+import { getUnitLabel, findUnit, convertToSI, UNITS } from "../utils/unitConversion";
 
 interface RecipeDetailProps {
   recipeId: string;
@@ -134,21 +135,98 @@ export default function RecipeDetail({ recipeId, onBack }: RecipeDetailProps) {
         <div className="space-y-4 max-w-2xl mx-auto">
           <h3 className="font-serif text-xl font-bold text-primary flex items-center gap-2 border-b border-outline-variant/30 pb-3">
             <Scale className="w-5 h-5 text-secondary" />
-            Ingredientes
+            Ingredientes (Ficha Técnica)
           </h3>
-          <ul className="space-y-3">
-            {recipe.ingredients?.map((ing, idx) => (
-              <li key={idx} className="flex justify-between items-start border-b border-outline-variant/10 pb-2 last:border-0">
-                <span className="font-sans text-sm text-on-surface-variant font-medium">{ing.name}</span>
-                <span className="font-sans text-sm text-primary font-bold whitespace-nowrap ml-4">
-                  {ing.quantity} {ing.unit}
-                </span>
-              </li>
-            ))}
+          
+          <div className="space-y-6">
+            {/* Cabeçalho da tabela de ingredientes */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 pb-1 border-b border-outline-variant/30">
+              <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">Ingrediente</span>
+              <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider text-right w-16">Valor</span>
+              <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider text-center w-36">Unidade</span>
+              <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider text-right w-24">Equiv. SI</span>
+            </div>
+
+            {Object.entries(
+              (recipe.ingredients || []).reduce((acc, ing) => {
+                const partName = ing.part || ing.group || "Ingredientes Gerais";
+                if (!acc[partName]) acc[partName] = [];
+                acc[partName].push(ing);
+                return acc;
+              }, {} as Record<string, RecipeIngredient[]>)
+            ).map(([partGroup, groupIngredients]) => {
+              const items = groupIngredients as RecipeIngredient[];
+              return (
+              <div key={partGroup} className="space-y-3 bg-lab-white/50 p-4 rounded-xl border border-outline-variant/20">
+                <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <h4 className="font-sans text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-secondary"></span>
+                    Parte / Grupo: <span className="text-secondary">{partGroup}</span>
+                  </h4>
+                </div>
+                <ul className="space-y-2">
+                  {items?.map((ing, idx) => {
+                    const unitDef = findUnit(ing.unit || '');
+                    const isCulinary = unitDef?.type === 'culinaria';
+                    const siResult = isCulinary ? convertToSI(ing.quantity, ing.unit) : null;
+                    
+                    return (
+                    <li key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center border-b border-outline-variant/10 pb-2 last:border-0">
+                      {/* Ingrediente + Categoria */}
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-sans text-sm text-on-surface-variant font-medium truncate">{ing.name}</span>
+                        {ing.category && (
+                          <span className="text-[10px] bg-surface-container text-scientific-gray px-2 py-0.5 rounded font-sans border border-outline-variant/30 flex-shrink-0" title="Área do Supermercado / Grupamento do Estoque">
+                            🛒 {ing.category}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Valor (numérico) */}
+                      <span className="font-serif text-sm font-bold text-primary text-right w-16 tabular-nums">
+                        {typeof ing.quantity === 'number' ? (Number.isInteger(ing.quantity) ? ing.quantity : ing.quantity.toFixed(2)) : ing.quantity}
+                      </span>
+                      
+                      {/* Unidade (dropdown visual) */}
+                      <select
+                        value={unitDef?.value || ing.unit || ''}
+                        disabled
+                        className="w-36 px-2 py-1.5 bg-white border border-outline-variant/40 rounded-lg text-xs font-sans font-semibold text-on-surface-variant appearance-none cursor-default text-center disabled:opacity-80"
+                        title={unitDef ? unitDef.label : ing.unit}
+                      >
+                        {unitDef ? (
+                          <option value={unitDef.value}>{unitDef.label}</option>
+                        ) : (
+                          <option value={ing.unit || ''}>{ing.unit || 'N/A'}</option>
+                        )}
+                        {UNITS.filter(u => u.value !== unitDef?.value).map(u => (
+                          <option key={u.value} value={u.value}>{u.label}</option>
+                        ))}
+                      </select>
+                      
+                      {/* Equivalência SI */}
+                      <div className="w-24 text-right">
+                        {siResult ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-sans font-semibold text-secondary bg-secondary/10 px-2 py-1 rounded-md" title="Convertido para Sistema Internacional">
+                            <ArrowRightLeft className="w-3 h-3" />
+                            {siResult.value} {siResult.unit}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-sans text-scientific-gray/50">— SI</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                  })}
+                </ul>
+              </div>
+              );
+            })}
+
             {(!recipe.ingredients || recipe.ingredients.length === 0) && (
               <p className="text-sm text-scientific-gray italic">Nenhum ingrediente catalogado.</p>
             )}
-          </ul>
+          </div>
         </div>
       </div>
     </motion.div>

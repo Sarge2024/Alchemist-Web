@@ -82,6 +82,8 @@ export interface RecipeIngredient {
   cookingFactor?: number;
   category?: string;
   subcategory?: string;
+  part?: string;
+  group?: string;
 }
 
 export interface PreparationStep {

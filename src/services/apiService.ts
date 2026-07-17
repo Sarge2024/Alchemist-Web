@@ -72,7 +72,12 @@ export const apiService = {
         carbs: Number(tn.carbs) || 0,
         fat: Number(tn.fat) || 0,
       },
-      ingredients: raw.ingredients || [],
+      ingredients: (raw.ingredients || []).map((ing: any) => ({
+        ...ing,
+        part: ing.part || ing.parte || ing.recipePart || ing.parte_grupo || ing.group || ing.grupo || '',
+        group: ing.group || ing.grupo || ing.part || ing.parte || ing.recipePart || ing.parte_grupo || '',
+        category: ing.category || ing.supermarketCategory || ing.categoria || ing.area_supermercado || '',
+      })),
       defaultDurabilityDays: raw.defaultDurabilityDays,
       estimatedCost: raw.estimatedCost || (raw.custo_estimado ? parseFloat(raw.custo_estimado) : undefined),
     };

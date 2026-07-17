@@ -4,6 +4,8 @@ import { ShoppingCart, Plus, Check, Trash2, Sparkles } from "lucide-react";
 import { ShoppingItem } from "../types";
 import { shoppingService } from "../services/shoppingService";
 import { plannerService } from "../services/plannerService";
+import { normalizeIngredientName } from "../utils/normalizeIngredient";
+import { convertToSI } from "../utils/unitConversion";
 
 interface ShoppingListProps {
   key?: string;
@@ -128,8 +130,10 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
                  }
               } else if (course.recipe.ingredients) {
                 course.recipe.ingredients.forEach(ing => {
-                  const nameLower = (ing.name || "").toLowerCase().trim();
-                  if (!nameLower) return;
+                  const rawName = (ing.name || "").trim();
+                  if (!rawName) return;
+                  // Normaliza removendo descritores ("média picada", "em cubos", etc.)
+                  const nameLower = normalizeIngredientName(rawName).toLowerCase();
                   
                   let numQty = 1;
                   let strUnit = (ing.unit || "").trim() || "unid";
@@ -180,27 +184,24 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
         
         // Remove vírgulas vindas da padronização TACO (ex: "açúcar, refinado" -> "açúcar refinado")
         standardizedName = standardizedName.replace(/,\s*/g, ' ').trim();
+        
+        // Normaliza removendo descritores de preparo/tamanho para agrupar corretamente
+        standardizedName = normalizeIngredientName(standardizedName).toLowerCase();
 
         const category = item.base_data?.category || "Produtos Genéricos";
         
-        // As quantidades já vêm normalizadas (em g, ml, ou fator de conversão) do Motor!
-        // No entanto, para a lista de compras, queremos manter as medidas visuais quando possível,
-        // mas o motor converteu tudo pra Gramas ou ML. 
-        // Vamos usar o quantity e unit do retorno que já são processados ou os originais se falhou.
-        let normQty = item.quantity;
-        let normUnit = item.unit.toLowerCase().trim();
+        // Converte unidades culinárias para SI usando o utilitário centralizado
+        // (arredondamento para cima é feito pelo convertToSI)
+        const siResult = convertToSI(item.quantity, item.unit);
+        const normQty = siResult.value;
+        let normUnit = siResult.unit.toLowerCase().trim();
         
-        // Conversão e padronização agressiva de grandezas para compras
-        if (normUnit.match(/^(g|grama|gramas)$/)) { normQty /= 1000; normUnit = "kg"; }
-        else if (normUnit.match(/^(ml|mililitro|mililitros)$/)) { normQty /= 1000; normUnit = "l"; }
-        else if (normUnit.match(/x[íi]cara/)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
-        else if (normUnit.match(/colher.*sopa/)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
-        else if (normUnit.match(/colher.*sobremesa|sobremesa/)) { normQty = (normQty * 10) / 1000; normUnit = "l"; }
-        else if (normUnit.match(/colher.*ch[aá]/)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
-        else if (normUnit.match(/quilo|kg/)) { normUnit = "kg"; }
-        else if (normUnit.match(/litro|^l$| l$/)) { normUnit = "l"; }
-        else if (normUnit.match(/dente/)) { normUnit = "unid"; }
-        else if (normUnit.match(/unid|un\b|^u$|^$/)) { normUnit = "unid"; }
+        // Garantir unidades padronizadas para agrupamento
+        if (normUnit.match(/^(g|grama|gramas)$/)) { normUnit = 'g'; }
+        else if (normUnit.match(/^(ml|mililitro|mililitros)$/)) { normUnit = 'ml'; }
+        else if (normUnit.match(/^(kg|quilo)$/)) { normUnit = 'kg'; }
+        else if (normUnit.match(/^(l|litro)$/)) { normUnit = 'l'; }
+        else if (normUnit.match(/unid|un\b|^u$|^$/)) { normUnit = 'unid'; }
         
         const key = `${standardizedName}_${normUnit}`;
         const current = ingredientMap.get(key);
@@ -215,19 +216,20 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
       let nextId = Date.now();
       
       ingredientMap.forEach((data, key) => {
-        let finalQuantity = data.quantity;
         const name = data.name;
         const nLower = name.toLowerCase();
         
-        // Arredonda para cima se for item tipicamente unitário ou líquido vendido em embalagens de 1L
+        // Arredonda para cima (Math.ceil) para itens unitários e líquidos em embalagem
         const isUnitary = data.unit === "unid" || 
                          (data.unit === "l" && nLower.includes("leite")) ||
                          nLower.match(/ovo|ovos|lata|caixa|garrafa|maço|pacote|pote|garrafa/);
                          
+        let finalQuantity: number;
         if (isUnitary) {
            finalQuantity = Math.ceil(data.quantity);
         } else {
-           finalQuantity = Math.round(data.quantity * 100) / 100;
+           // Arredonda para cima com 2 casas decimais
+           finalQuantity = Math.ceil(data.quantity * 100) / 100;
         }
 
         newItems.push({

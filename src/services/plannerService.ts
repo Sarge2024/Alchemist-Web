@@ -4,6 +4,7 @@ import { WeeklyPlan, Recipe } from '../types';
 
 import { ShoppingItem, ShoppingListDoc } from '../types';
 import { shoppingService } from './shoppingService';
+import { normalizeIngredientName } from '../utils/normalizeIngredient';
 
 export const plannerService = {
   // Gera um ID de semana baseado na data atual e em um offset (ex: 2026-W26)
@@ -182,7 +183,8 @@ export const plannerService = {
               const ingredients = course.recipe.ingredients || [];
               for (const ing of ingredients) {
                 if (!ing.name) continue;
-                const name = ing.name;
+                const rawName = ing.name;
+                const name = normalizeIngredientName(rawName);
                 const rawQty = ing.quantity || 0;
                 const unit = ing.unit || "";
                 
