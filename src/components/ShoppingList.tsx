@@ -111,7 +111,7 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
         // Coletar todos os ingredientes brutos
       const rawIngredients: { name: string; quantity: number; unit: string }[] = [];
       
-      const ingredientMap = new Map<string, { quantity: number, unit: string, category: string }>();
+      const ingredientMap = new Map<string, { name: string, quantity: number, unit: string, category: string }>();
 
       plan.days.forEach(day => {
         day.meals.forEach(meal => {
@@ -119,11 +119,12 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
             if (course.recipe) {
               if (course.recipe.category === "PRODUTO" || (!course.recipe.ingredients || course.recipe.ingredients.length === 0)) {
                  const nameLower = course.recipe.title.toLowerCase().trim();
-                 const current = ingredientMap.get(nameLower);
+                 const key = `${nameLower}_unid`;
+                 const current = ingredientMap.get(key);
                  if (current) {
                     current.quantity += 1;
                  } else {
-                    ingredientMap.set(nameLower, { quantity: 1, unit: "unid", category: "Produtos Genéricos" });
+                    ingredientMap.set(key, { name: nameLower, quantity: 1, unit: "unid", category: "Produtos Genéricos" });
                  }
               } else if (course.recipe.ingredients) {
                 course.recipe.ingredients.forEach(ing => {
@@ -175,7 +176,11 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
       
       details.forEach(item => {
         // Obter nome e categoria padronizados, com fallback para o original
-        const standardizedName = item.base_data?.name ? item.base_data.name.toLowerCase().trim() : item.ingredient;
+        let standardizedName = item.base_data?.name ? item.base_data.name.toLowerCase().trim() : item.ingredient;
+        
+        // Remove vírgulas vindas da padronização TACO (ex: "açúcar, refinado" -> "açúcar refinado")
+        standardizedName = standardizedName.replace(/,\s*/g, ' ').trim();
+
         const category = item.base_data?.category || "Produtos Genéricos";
         
         // As quantidades já vêm normalizadas (em g, ml, ou fator de conversão) do Motor!
@@ -185,35 +190,33 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
         let normQty = item.quantity;
         let normUnit = item.unit.toLowerCase().trim();
         
-        // Conversão de grandezas para compras (g -> kg, ml -> l)
-        if (["g", "grama", "gramas"].includes(normUnit)) { normQty /= 1000; normUnit = "kg"; }
-        else if (["ml", "mililitro", "mililitros"].includes(normUnit)) { normQty /= 1000; normUnit = "l"; }
-        else if (["xícara", "xicara", "xícaras", "xicaras"].includes(normUnit)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
-        else if (["colher de sopa", "colheres de sopa", "colher sopa", "sopa"].includes(normUnit)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
-        else if (["colher de chá", "colheres de chá", "colher cha", "chá"].includes(normUnit)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
-        else if (["quilo", "quilos", "quilograma", "quilogramas"].includes(normUnit)) { normUnit = "kg"; }
-        else if (["unidade", "unidades", "unid.", ""].includes(normUnit)) { normUnit = "unid"; }
+        // Conversão e padronização agressiva de grandezas para compras
+        if (normUnit.match(/^(g|grama|gramas)$/)) { normQty /= 1000; normUnit = "kg"; }
+        else if (normUnit.match(/^(ml|mililitro|mililitros)$/)) { normQty /= 1000; normUnit = "l"; }
+        else if (normUnit.match(/x[íi]cara/)) { normQty = (normQty * 240) / 1000; normUnit = "l"; }
+        else if (normUnit.match(/colher.*sopa/)) { normQty = (normQty * 15) / 1000; normUnit = "l"; }
+        else if (normUnit.match(/colher.*sobremesa|sobremesa/)) { normQty = (normQty * 10) / 1000; normUnit = "l"; }
+        else if (normUnit.match(/colher.*ch[aá]/)) { normQty = (normQty * 5) / 1000; normUnit = "l"; }
+        else if (normUnit.match(/quilo|kg/)) { normUnit = "kg"; }
+        else if (normUnit.match(/litro|^l$| l$/)) { normUnit = "l"; }
+        else if (normUnit.match(/dente/)) { normUnit = "unid"; }
+        else if (normUnit.match(/unid|un\b|^u$|^$/)) { normUnit = "unid"; }
         
-        const current = ingredientMap.get(standardizedName);
+        const key = `${standardizedName}_${normUnit}`;
+        const current = ingredientMap.get(key);
         if (current) {
-          if (current.unit === normUnit) {
-            current.quantity += normQty;
-          } else {
-            const uniqueKey = standardizedName + ` (${normUnit})`;
-            const existingAlt = ingredientMap.get(uniqueKey);
-            if (existingAlt) existingAlt.quantity += normQty;
-            else ingredientMap.set(uniqueKey, { quantity: normQty, unit: normUnit, category });
-          }
+          current.quantity += normQty;
         } else {
-           ingredientMap.set(standardizedName, { quantity: normQty, unit: normUnit, category });
+           ingredientMap.set(key, { name: standardizedName, quantity: normQty, unit: normUnit, category });
         }
       });
       
       const newItems: ShoppingItem[] = [];
       let nextId = Date.now();
       
-      ingredientMap.forEach((data, name) => {
+      ingredientMap.forEach((data, key) => {
         let finalQuantity = data.quantity;
+        const name = data.name;
         const nLower = name.toLowerCase();
         
         // Arredonda para cima se for item tipicamente unitário ou líquido vendido em embalagens de 1L

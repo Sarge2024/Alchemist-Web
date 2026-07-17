@@ -56,6 +56,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
   const [targetSlot, setTargetSlot] = useState<{dayIndex: number, mealIndex: number, courseIndex: number} | null>(null);
   const [visibleRecipesCount, setVisibleRecipesCount] = useState(10);
   const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
+  const [recipeSearch, setRecipeSearch] = useState('');
 
   // Products state for Modal
   const [productSearch, setProductSearch] = useState('');
@@ -193,6 +194,7 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
       setTargetSlot({ dayIndex, mealIndex, courseIndex });
       setModalTab('recipes');
       setProductSearch('');
+      setRecipeSearch('');
       setRecipeModalOpen(true);
       setVisibleRecipesCount(10);
       setActivePopoverDayIndex(null); // Close the popover
@@ -502,16 +504,35 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {modalTab === 'recipes' ? (
-                  availableRecipes.length === 0 ? (
-                    <p className="text-center text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {(() => {
-                        if (!targetSlot || !weeklyPlan) return null;
-                        const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
-                        const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-scientific-gray absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={recipeSearch}
+                          onChange={(e) => setRecipeSearch(e.target.value)}
+                          placeholder="Buscar receita pelo nome..."
+                          className="w-full pl-9 pr-4 py-2 bg-lab-white border border-outline-variant/40 rounded-xl text-sm outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                    {availableRecipes.length === 0 ? (
+                      <p className="text-center text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {(() => {
+                          if (!targetSlot || !weeklyPlan) return null;
+                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
 
-                        let filteredRecipes = availableRecipes.filter(recipe => {
+                          let filteredRecipes = availableRecipes.filter(recipe => {
+                            if (recipeSearch.trim()) {
+                              const term = recipeSearch.toLowerCase();
+                              if (!recipe.title.toLowerCase().includes(term) && !recipe.description?.toLowerCase().includes(term)) {
+                                return false;
+                              }
+                            }
                           const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
                           const rawMom = (recipe as any).momento;
                           const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
@@ -542,27 +563,9 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                             return false;
                           }
 
-                          const isDessert = p.includes("Doces e Sobremesas") || m.includes("Sobremesas");
-                          const isSnack = m.includes("Lanche / Chá da Tarde") || m.includes("Petiscos&Food Tricks") || p.includes("Padaria e Pastelaria") || m.includes("Café da Manhã") || m.includes("Ceia") || m.includes("Lanche") || m.includes("Lanche da Tarde");
-                          const isStarter = m.includes("Entradas") || p.includes("Saladas e Pratos Frios") || m.includes("Sopas e Caldos");
-
-                          switch (courseType) {
-                            case "Entrada": 
-                              return isStarter || (isSnack && !isDessert && !isDrink) || (isExactMealMatch && !isDrink && !isDessert);
-                            case "Sobremesa": 
-                              return isDessert;
-                            case "Bebida": 
-                              return isDrink;
-                            case "Lanche": 
-                              return isSnack || isDessert || p.includes("Massas e Risotos") || isExactMealMatch;
-                            case "Prato Principal": 
-                              if (isDrink || isDessert || isStarter || isSnack) {
-                                if (isExactMealMatch && !isDrink && !isDessert) return true;
-                                return false;
-                              }
-                              return true;
-                            default: return true;
-                          }
+                          // Na interface compacta, ignoramos o 'courseType' (Entrada, Prato Principal, etc) 
+                          // que é específico da interface clássica, para não interferir na busca genérica de refeição.
+                          return true;
                         });
 
                         // Sort so approved recipes appear first (prioritizing exact period match)
@@ -645,7 +648,8 @@ export default function CompactWeeklyPlanner({ familyId, activeProfileId }: Comp
                         );
                       })()}
                     </div>
-                  )
+                  )}
+                </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex gap-2">

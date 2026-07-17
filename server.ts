@@ -20,21 +20,23 @@ app.use(express.json({ limit: '10mb' }));
 // Configuração — API Key server-side only
 // ==========================================
 const DISH_API_BASE = process.env.DISHALCHEMISTS_API_BASE || 'http://localhost:4005/api/v1/public';
-const DISH_API_KEY = process.env.DISHALCHEMISTS_API_KEY || '';
+const DISH_API_KEY = process.env.DISHALCHEMISTS_API_KEY || 'alchemist-app-secret-2024';
 
 // Helper: headers padrão para comunicação com o backend Alchemist
-function backendHeaders(): Record<string, string> {
-    return {
+function backendHeaders(req?: Request): Record<string, string> {
+    const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-api-key': DISH_API_KEY
     };
+    if (req && req.headers.authorization) {
+        headers['Authorization'] = req.headers.authorization;
+    }
+    return headers;
 }
 
 // ==========================================
 // Rotas Proxy — DishAlchemists Public API
 // ==========================================
-
-import { mockRecipes } from './src/mocks/recipes';
 
 // GET /api/recipes — Lista receitas com paginação e filtros
 app.get('/api/recipes', async (req, res) => {
@@ -50,14 +52,13 @@ app.get('/api/recipes', async (req, res) => {
         const url = `${DISH_API_BASE}/recipes${params.toString() ? '?' + params.toString() : ''}`;
         const response = await fetch(url, { headers: backendHeaders() });
         if (!response.ok) {
-            console.warn(`DishAlchemists API falhou em /recipes (${response.status}). Retornando lista de mock.`);
-            return res.json({ data: mockRecipes, total: mockRecipes.length, page: Number(page) || 1, limit: Number(limit) || 10, totalPages: 1 });
+            throw new Error(`API error: ${response.status}`);
         }
         const data = await response.json();
         res.json(data);
     } catch (err: any) {
         console.error("Erro ao buscar receitas do DishAlchemists:", err.message);
-        res.json({ data: mockRecipes, total: mockRecipes.length, page: 1, limit: 10, totalPages: 1 });
+        res.status(500).json({ error: "Falha na comunicação com DishAlchemists" });
     }
 });
 
@@ -73,15 +74,13 @@ app.get('/api/recipes/search', async (req, res) => {
             headers: backendHeaders()
         });
         if (!response.ok) {
-            console.warn(`DishAlchemists API falhou em /search (${response.status}). Retornando lista de mock.`);
-            const filtered = q ? mockRecipes.filter(r => r.title.toLowerCase().includes((q as string).toLowerCase())) : mockRecipes;
-            return res.json({ data: filtered, total: filtered.length });
+            throw new Error(`API error: ${response.status}`);
         }
         const data = await response.json();
         res.json(data);
     } catch (err: any) {
         console.error("Erro ao buscar receitas:", err.message);
-        res.json({ data: mockRecipes, total: mockRecipes.length });
+        res.status(500).json({ error: "Falha na comunicação com DishAlchemists" });
     }
 });
 
@@ -134,7 +133,7 @@ app.get('/api/ingredients', async (req, res) => {
 });
 
 // ==========================================
-// Motor Nutricional — Proxy para o backend
+// Motor Nutricional — Proxy para o backend com Fallback Local
 // ==========================================
 app.post('/api/nutrition/calculate', async (req, res) => {
     try {
@@ -143,16 +142,89 @@ app.post('/api/nutrition/calculate', async (req, res) => {
             return res.status(400).json({ error: "Campo 'ingredients' inválido ou ausente. Precisa ser um array." });
         }
 
-        // Proxeia para o backend Alchemist (onde TACO + USDA são consultadas com process.env)
+        // Tenta o backend Alchemist primeiro
         const response = await fetch(`${DISH_API_BASE.replace('/api/v1/public', '')}/api/nutrition/calculate`, {
             method: 'POST',
-            headers: backendHeaders(),
+            headers: backendHeaders(req),
             body: JSON.stringify({ ingredients })
         });
 
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
-        const data = await response.json();
-        res.json(data);
+        if (response.ok) {
+            const data = await response.json();
+            return res.json(data);
+        }
+        
+        console.warn(`DishAlchemists API falhou no motor nutricional (${response.status}). Realizando cálculo local via Supabase...`);
+
+        // Falhou (ex: 401), então realiza o cálculo localmente usando findFoodInDatabase
+        let totalCalories = 0;
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        
+        const details = await Promise.all(ingredients.map(async (ing: any) => {
+            const dbMatch = await findFoodInDatabase(ing.name);
+            if (dbMatch) {
+                let weightGrams = ing.quantity || 0;
+                const unit = (ing.unit || '').toLowerCase();
+                if (unit.match(/kg|quilo/)) weightGrams *= 1000;
+                else if (unit.match(/l|litro/)) weightGrams *= 1000;
+                else if (unit.match(/x[íi]cara/)) weightGrams *= 240;
+                else if (unit.match(/colher.*sopa/)) weightGrams *= 15;
+                else if (unit.match(/colher.*sobremesa/)) weightGrams *= 10;
+                else if (unit.match(/colher.*ch[aá]/)) weightGrams *= 5;
+                
+                const itemCalories = (dbMatch.calories_per_100g / 100) * weightGrams;
+                const itemProtein = (dbMatch.protein_per_100g / 100) * weightGrams;
+                const itemCarbs = (dbMatch.carbs_per_100g / 100) * weightGrams;
+                const itemFat = (dbMatch.fat_per_100g / 100) * weightGrams;
+                
+                totalCalories += itemCalories;
+                totalProtein += itemProtein;
+                totalCarbs += itemCarbs;
+                totalFat += itemFat;
+                
+                return {
+                    ingredient: ing.name,
+                    source: dbMatch.source,
+                    base_data: {
+                        id: dbMatch.id,
+                        name: dbMatch.name,
+                        calories_per_100g: dbMatch.calories_per_100g,
+                        protein_per_100g: dbMatch.protein_per_100g,
+                        carbs_per_100g: dbMatch.carbs_per_100g,
+                        fat_per_100g: dbMatch.fat_per_100g,
+                    },
+                    quantity: ing.quantity,
+                    unit: ing.unit,
+                    calories: itemCalories,
+                    protein: itemProtein,
+                    carbs: itemCarbs,
+                    fat: itemFat
+                };
+            } else {
+                return {
+                    ingredient: ing.name,
+                    source: 'NOT_FOUND',
+                    quantity: ing.quantity,
+                    unit: ing.unit,
+                    calories: 0,
+                    protein: 0,
+                    carbs: 0,
+                    fat: 0
+                };
+            }
+        }));
+
+        res.json({
+            total_nutrition: {
+                calories: totalCalories,
+                protein: totalProtein,
+                carbs: totalCarbs,
+                fat: totalFat
+            },
+            details
+        });
     } catch (err: any) {
         console.error("Erro no motor nutricional:", err.message);
         res.status(500).json({ error: "Erro interno no cálculo nutricional" });

@@ -29,7 +29,7 @@ export class NutritionalEngineService {
    * Ponto de entrada do Motor. Envia a lista de ingredientes ao BFF,
    * que proxeia para o backend Alchemist (onde TACO + USDA são consultadas server-side).
    */
-  public static async calculateRecipeNutrition(ingredients: IngredientQuery[]): Promise<{
+  public static async calculateRecipeNutrition(ingredients: IngredientQuery[], firebaseToken?: string): Promise<{
     total_nutrition: { calories: number; protein: number; carbs: number; fat: number; },
     details: NutritionalResult[]
   }> {
@@ -41,7 +41,7 @@ export class NutritionalEngineService {
 
       const response = await fetch(url, {
         method: 'POST',
-        headers: apiService.getHeaders(),
+        headers: apiService.getHeaders(firebaseToken),
         body: JSON.stringify({ ingredients })
       });
 

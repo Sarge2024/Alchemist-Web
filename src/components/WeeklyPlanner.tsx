@@ -60,6 +60,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
 
   // Estados para produtos industrializados
   const [modalTab, setModalTab] = useState<'recipes' | 'products'>('recipes');
+  const [recipeSearch, setRecipeSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [availableProducts, setAvailableProducts] = useState<IndustrialProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -191,6 +192,7 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
     setTargetSlot({ dayIndex, mealIndex, courseIndex });
     setModalTab('recipes');
     setProductSearch('');
+    setRecipeSearch('');
     setRecipeModalOpen(true);
     setVisibleRecipesCount(10);
   };
@@ -925,15 +927,34 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
 
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {modalTab === 'recipes' ? (
-                  availableRecipes.length === 0 ? (
-                    <p className="text-center font-sans text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                       {(() => {
-                         const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
-                         const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-scientific-gray absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={recipeSearch}
+                          onChange={(e) => setRecipeSearch(e.target.value)}
+                          placeholder="Buscar receita pelo nome..."
+                          className="w-full pl-10 pr-4 py-2 bg-lab-white border border-outline-variant/40 rounded-xl text-xs outline-none focus:border-primary focus:bg-white transition-all font-sans"
+                        />
+                      </div>
+                    </div>
+                    {availableRecipes.length === 0 ? (
+                      <p className="text-center font-sans text-sm text-scientific-gray py-10">Nenhuma receita disponível.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {(() => {
+                          const currentPeriod = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].name;
+                          const courseType = weeklyPlan.days[targetSlot.dayIndex].meals[targetSlot.mealIndex].courses[targetSlot.courseIndex].type;
 
-                         let filteredRecipes = availableRecipes.filter(recipe => {
+                          let filteredRecipes = availableRecipes.filter(recipe => {
+                            if (recipeSearch.trim()) {
+                              const term = recipeSearch.toLowerCase();
+                              if (!recipe.title.toLowerCase().includes(term) && !recipe.description?.toLowerCase().includes(term)) {
+                                return false;
+                              }
+                            }
                             const p = Array.isArray(recipe.category) ? recipe.category : (recipe.category ? [recipe.category] : []);
                             const rawMom = (recipe as any).momento;
                             const m = Array.isArray(rawMom) ? rawMom : (rawMom ? [rawMom] : []);
@@ -1065,7 +1086,8 @@ export default function WeeklyPlanner({ familyId, activeProfileId }: WeeklyPlann
                         );
                       })()}
                     </div>
-                  )
+                  )}
+                </div>
                 ) : (
                   // ABA DE PRODUTOS
                   <div className="space-y-4">
