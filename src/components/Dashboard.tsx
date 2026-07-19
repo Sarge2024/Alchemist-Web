@@ -757,7 +757,10 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
               <div className="bg-sage-wash/40 border border-outline-variant/30 rounded-lg p-3 mb-5">
                 <div className="flex justify-between items-center">
                   <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">1 porção ≈</span>
-                  <span className="font-sans text-xs font-semibold text-primary">{portionInfo.weightG}g · {portionInfo.label}</span>
+                  <span className="font-sans text-xs font-semibold text-primary text-right">
+                    {portionInfo.weightG}g<br/>
+                    <span className="text-[10px] text-scientific-gray font-medium">(~ {Math.round(portionInfo.weightG / getRecipeTablespoonWeight(partialConsumptionMeal.recipe))} colheres de sopa)</span>
+                  </span>
                 </div>
                 <div className="flex justify-between items-center mt-1">
                   <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">Valor energético</span>
@@ -775,12 +778,17 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
               {/* Display principal */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex flex-col">
-                  <span className="font-sans font-bold text-3xl text-primary">{formatPortions(consumedPortions)}</span>
+                  <span className="font-sans font-bold text-3xl text-primary flex items-baseline gap-2">
+                    {formatPortions(consumedPortions)}
+                  </span>
+                  <span className="font-sans text-sm font-bold text-secondary mt-1">
+                    ≈ {Math.round(weightConsumed / getRecipeTablespoonWeight(partialConsumptionMeal.recipe))} colheres de sopa
+                  </span>
                   <span className="font-sans text-xs font-bold text-scientific-gray mt-1">
                     Ingerido: <span className="text-primary">{kcalConsumed} kcal</span>
                   </span>
                   <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                    ≈ {weightConsumed}g consumidos (~ {Math.round(weightConsumed / getRecipeTablespoonWeight(partialConsumptionMeal.recipe))} colheres de sopa)
+                    {weightConsumed}g consumidos
                   </span>
                 </div>
                 {consumedPortions < 1 && (
