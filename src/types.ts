@@ -107,6 +107,7 @@ export interface Recipe {
   preparationSteps?: PreparationStep[];
   defaultDurabilityDays?: number;
   estimatedCost?: number;
+  portionWeightG?: number; // Peso em gramas de 1 porção padrão (ex: 350 para prato feito, 240 para massas)
 }
 
 export interface PaginatedResponse<T> {
@@ -175,7 +176,8 @@ export interface LogEntry {
   carbs: number;
   fat: number;
   cost?: number; // Custo financeiro consumido
-  consumedPercentage?: number; // Porcentagem do que foi efetivamente consumido (0 a 100)
+  consumedPercentage?: number; // (Legacy) Porcentagem do que foi efetivamente consumido (0 a 100)
+  consumedPortions?: number; // Número de porções consumidas (ex: 0.5, 1, 1.5, 2)
   wasteCost?: number; // Custo financeiro do que sobrou no prato (Resto-Ingestão)
   status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING";
   plannedMealRef?: string; // Reference to the course/meal in the WeeklyPlan

@@ -4,6 +4,7 @@ import { CheckCircle2, Circle, TrendingUp, Users, RefreshCw, Check, ArrowRight, 
 import { Profile, Recipe, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
 import { plannerService } from "../services/plannerService";
+import { getDefaultPortionWeight, portionsToFactor, formatPortions } from "../utils/portionDefaults";
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -30,9 +31,9 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
   
   const [activeProfile, setActiveProfile] = useState<any>(null);
   
-  // Partial Consumption (Resto-Ingestão)
+  // Partial Consumption (Resto-Ingestão) — agora baseado em porções
   const [partialConsumptionMeal, setPartialConsumptionMeal] = useState<any | null>(null);
-  const [consumedPercentage, setConsumedPercentage] = useState<number>(100);
+  const [consumedPortions, setConsumedPortions] = useState<number>(1);
   
   const [todayMeals, setTodayMeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +136,8 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                   },
                   estimatedCost: estCost,
                   time: meal.name,
-                  status: mealStatus
+                  status: mealStatus,
+                  recipe: course.recipe  // Guardar referência para getDefaultPortionWeight
                 });
               }
             });
@@ -203,9 +205,11 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     };
   }, [familyId, activeProfileId]);
 
-  const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING", pct: number = 100) => {
+  const toggleMeal = async (mealId: string, status: "CONSUMED_AS_PLANNED" | "SKIPPED" | "SUBSTITUTED" | "PENDING", portions: number = 1) => {
     const meal = todayMeals.find(m => m.id === mealId);
     if (!meal) return;
+
+    const factor = portionsToFactor(portions);
 
     // Optimistic UI update
     setTodayMeals(meals => meals.map(m => m.id === mealId ? { ...m, status } : m));
@@ -213,7 +217,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
       let next = { ...prev };
       const oldStatus = meal.status;
       
-      // Revert old status contribution (assuming 100% for simplicity in optimistic revert, server will correct it)
+      // Revert old status contribution
       if (oldStatus === "CONSUMED_AS_PLANNED" || oldStatus === "SUBSTITUTED") {
           next.kcal = Math.max(0, next.kcal - meal.nutrition.calories);
           next.protein = Math.max(0, next.protein - meal.nutrition.protein);
@@ -223,11 +227,10 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
       
       // Apply new status contribution
       if (status === "CONSUMED_AS_PLANNED" || status === "SUBSTITUTED") {
-          const pctDecimal = pct / 100;
-          next.kcal += meal.nutrition.calories * pctDecimal;
-          next.protein += meal.nutrition.protein * pctDecimal;
-          next.carbs += meal.nutrition.carbs * pctDecimal;
-          next.fat += meal.nutrition.fat * pctDecimal;
+          next.kcal += meal.nutrition.calories * factor;
+          next.protein += meal.nutrition.protein * factor;
+          next.carbs += meal.nutrition.carbs * factor;
+          next.fat += meal.nutrition.fat * factor;
       }
       
       return next;
@@ -254,24 +257,23 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         // Remove existing entry if any
         logDoc.entries = logDoc.entries.filter(e => e.plannedMealRef !== mealId);
         
-        const pctDecimal = pct / 100;
-        
-        const logEntryCost = meal.estimatedCost ? (meal.estimatedCost * pctDecimal) : 0;
-        const wasteCostVal = meal.estimatedCost ? (meal.estimatedCost - logEntryCost) : 0;
+        const logEntryCost = meal.estimatedCost ? (meal.estimatedCost * factor) : 0;
+        const wasteCostVal = meal.estimatedCost ? Math.max(0, meal.estimatedCost - logEntryCost) : 0;
 
         const newEntry: any = {
           id: meal.id,
           time: meal.time,
           foodName: meal.name,
           category: "Planejado",
-          calories: Math.round(meal.nutrition.calories * pctDecimal),
-          protein: meal.nutrition.protein * pctDecimal,
-          carbs: meal.nutrition.carbs * pctDecimal,
-          fat: meal.nutrition.fat * pctDecimal,
+          calories: Math.round(meal.nutrition.calories * factor),
+          protein: meal.nutrition.protein * factor,
+          carbs: meal.nutrition.carbs * factor,
+          fat: meal.nutrition.fat * factor,
           cost: logEntryCost,
-          consumedPercentage: pct,
+          consumedPortions: portions,
+          consumedPercentage: Math.round(factor * 100), // Legacy compatibility
           wasteCost: wasteCostVal,
-          details: "",
+          details: formatPortions(portions),
           status: status,
           plannedMealRef: mealId
         };
@@ -580,7 +582,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                               toggleMeal(meal.id, "PENDING");
                             } else {
                               setPartialConsumptionMeal(meal);
-                              setConsumedPercentage(100);
+                              setConsumedPortions(1);
                             }
                           }}
                           className={`p-1 rounded-md transition-colors ${
@@ -707,7 +709,16 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
     
     {/* Partial Consumption Modal */}
     <AnimatePresence>
-      {partialConsumptionMeal && (
+      {partialConsumptionMeal && (() => {
+        const portionInfo = partialConsumptionMeal.recipe 
+          ? getDefaultPortionWeight(partialConsumptionMeal.recipe)
+          : { weightG: 350, label: 'Refeição completa' };
+        const factor = portionsToFactor(consumedPortions);
+        const kcalConsumed = Math.round((partialConsumptionMeal.nutrition?.calories || 0) * factor);
+        const kcalTotal = partialConsumptionMeal.nutrition?.calories || 0;
+        const weightConsumed = Math.round(portionInfo.weightG * consumedPortions);
+        
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -736,45 +747,88 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                 </div>
               </div>
 
-              <label className="block font-sans text-sm font-semibold text-on-surface mb-2">
-                O quanto você consumiu desta refeição?
-              </label>
-              <p className="text-xs text-scientific-gray mb-4 font-sans leading-relaxed">
-                Deslize para informar o valor exato ingerido. O que sobrar (Resto-Ingestão) será contabilizado no desperdício de caixa (UAN).
-              </p>
-
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex flex-col">
-                  <span className="font-sans font-bold text-3xl text-primary">{consumedPercentage}%</span>
-                  <span className="font-sans text-xs font-bold text-scientific-gray mt-1">
-                    Ingerido: <span className="text-primary">{Math.round((partialConsumptionMeal.nutrition?.calories || 0) * (consumedPercentage / 100))} kcal</span>
-                  </span>
+              {/* Porção de referência */}
+              <div className="bg-sage-wash/40 border border-outline-variant/30 rounded-lg p-3 mb-5">
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">1 porção ≈</span>
+                  <span className="font-sans text-xs font-semibold text-primary">{portionInfo.weightG}g · {portionInfo.label}</span>
                 </div>
-                <div className="text-right">
-                  <span className="font-sans text-xs text-scientific-gray block">
-                    Sobrou: <strong className="text-secondary">{100 - consumedPercentage}%</strong> no prato
-                  </span>
-                  <span className="font-sans text-[10px] text-scientific-gray block mt-1">
-                    Desperdício: {Math.round((partialConsumptionMeal.nutrition?.calories || 0) * ((100 - consumedPercentage) / 100))} kcal
-                  </span>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="font-sans text-[10px] font-bold text-scientific-gray uppercase tracking-wider">Valor energético</span>
+                  <span className="font-sans text-xs font-semibold text-secondary">{kcalTotal} kcal / porção</span>
                 </div>
               </div>
+
+              <label className="block font-sans text-sm font-semibold text-on-surface mb-2">
+                Quantas porções você consumiu?
+              </label>
+              <p className="text-xs text-scientific-gray mb-4 font-sans leading-relaxed">
+                Selecione ou ajuste o número de porções consumidas. O sistema calculará automaticamente as calorias e macros ingeridos.
+              </p>
+
+              {/* Display principal */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col">
+                  <span className="font-sans font-bold text-3xl text-primary">{formatPortions(consumedPortions)}</span>
+                  <span className="font-sans text-xs font-bold text-scientific-gray mt-1">
+                    Ingerido: <span className="text-primary">{kcalConsumed} kcal</span>
+                  </span>
+                  <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
+                    ≈ {weightConsumed}g consumidos
+                  </span>
+                </div>
+                {consumedPortions < 1 && (
+                  <div className="text-right">
+                    <span className="font-sans text-xs text-scientific-gray block">
+                      Sobrou: <strong className="text-secondary">{formatPortions(1 - consumedPortions)}</strong>
+                    </span>
+                    <span className="font-sans text-[10px] text-scientific-gray block mt-1">
+                      Desperdício: {Math.round(kcalTotal * (1 - factor))} kcal
+                    </span>
+                  </div>
+                )}
+                {consumedPortions > 1 && (
+                  <div className="text-right">
+                    <span className="font-sans text-xs text-secondary font-semibold block">
+                      Repetiu {formatPortions(consumedPortions - 1)}
+                    </span>
+                    <span className="font-sans text-[10px] text-scientific-gray block mt-1">
+                      Extra: +{Math.round(kcalTotal * (factor - 1))} kcal
+                    </span>
+                  </div>
+                )}
+              </div>
               
+              {/* Slider de porções */}
               <input 
                 type="range" 
                 min="0" 
-                max="100" 
-                step="5"
-                value={consumedPercentage}
-                onChange={(e) => setConsumedPercentage(parseInt(e.target.value))}
-                className="w-full h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary mb-6"
+                max="5" 
+                step="0.5"
+                value={consumedPortions}
+                onChange={(e) => setConsumedPortions(parseFloat(e.target.value))}
+                className="w-full h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary mb-2"
               />
+              <div className="flex justify-between text-[9px] font-sans text-scientific-gray mb-5 px-0.5">
+                <span>0</span>
+                <span>½</span>
+                <span>1</span>
+                <span>1½</span>
+                <span>2</span>
+                <span>2½</span>
+                <span>3</span>
+                <span>3½</span>
+                <span>4</span>
+                <span>4½</span>
+                <span>5</span>
+              </div>
               
+              {/* Botões rápidos de porções */}
               <div className="flex justify-between gap-2 mb-2">
-                <button onClick={() => setConsumedPercentage(25)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">25%</button>
-                <button onClick={() => setConsumedPercentage(50)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">50%</button>
-                <button onClick={() => setConsumedPercentage(75)} className="flex-1 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-sans font-semibold text-scientific-gray hover:bg-surface-container transition-colors">75%</button>
-                <button onClick={() => setConsumedPercentage(100)} className="flex-1 py-1.5 rounded-lg border border-primary/30 text-xs font-sans font-bold text-primary bg-primary/5 hover:bg-primary/10 transition-colors">100%</button>
+                <button onClick={() => setConsumedPortions(0.5)} className={`flex-1 py-2 rounded-lg border text-xs font-sans font-semibold transition-colors ${consumedPortions === 0.5 ? 'bg-primary/10 border-primary/40 text-primary font-bold' : 'border-outline-variant/30 text-scientific-gray hover:bg-surface-container'}`}>½</button>
+                <button onClick={() => setConsumedPortions(1)} className={`flex-1 py-2 rounded-lg border text-xs font-sans font-semibold transition-colors ${consumedPortions === 1 ? 'bg-primary/10 border-primary/40 text-primary font-bold' : 'border-outline-variant/30 text-scientific-gray hover:bg-surface-container'}`}>1</button>
+                <button onClick={() => setConsumedPortions(1.5)} className={`flex-1 py-2 rounded-lg border text-xs font-sans font-semibold transition-colors ${consumedPortions === 1.5 ? 'bg-primary/10 border-primary/40 text-primary font-bold' : 'border-outline-variant/30 text-scientific-gray hover:bg-surface-container'}`}>1½</button>
+                <button onClick={() => setConsumedPortions(2)} className={`flex-1 py-2 rounded-lg border text-xs font-sans font-semibold transition-colors ${consumedPortions === 2 ? 'bg-primary/10 border-primary/40 text-primary font-bold' : 'border-outline-variant/30 text-scientific-gray hover:bg-surface-container'}`}>2</button>
               </div>
             </div>
 
@@ -787,7 +841,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
               </button>
               <button
                 onClick={() => {
-                  toggleMeal(partialConsumptionMeal.id, consumedPercentage > 0 ? "CONSUMED_AS_PLANNED" : "SKIPPED", consumedPercentage);
+                  toggleMeal(partialConsumptionMeal.id, consumedPortions > 0 ? "CONSUMED_AS_PLANNED" : "SKIPPED", consumedPortions);
                   setPartialConsumptionMeal(null);
                 }}
                 className="px-6 py-2 rounded-lg font-sans text-sm font-bold text-white bg-primary hover:bg-primary/90 transition-colors shadow-sm"
@@ -797,7 +851,8 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
             </div>
           </motion.div>
         </div>
-      )}
+        );
+      })()}
     </AnimatePresence>
     </>
   );

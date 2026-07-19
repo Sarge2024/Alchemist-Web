@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Plus, Trash2, Search, Zap, Droplet, Apple, Clock, ChevronLeft, ChevronRight, Activity, CalendarDays, Check, Calendar, Cookie, Coffee } from "lucide-react";
 import { LogEntry, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
+import { formatPortions } from "../utils/portionDefaults";
 
 interface ConsumptionHistoryProps {
   key?: string;
@@ -334,6 +335,16 @@ export default function ConsumptionHistory({ familyId, activeProfileId }: Consum
                           }`}>
                             {log.category}
                           </span>
+                          {/* Porções consumidas (com fallback para % legado) */}
+                          {log.consumedPortions != null ? (
+                            <span className="px-2 py-0.5 rounded text-[8px] font-bold tracking-wider bg-primary/10 text-primary border border-primary/20">
+                              {formatPortions(log.consumedPortions)}
+                            </span>
+                          ) : log.consumedPercentage != null && log.consumedPercentage < 100 ? (
+                            <span className="px-2 py-0.5 rounded text-[8px] font-bold tracking-wider bg-outline-variant/20 text-scientific-gray">
+                              {log.consumedPercentage}%
+                            </span>
+                          ) : null}
                         </div>
                         <p className="font-sans text-xs text-scientific-gray leading-relaxed">
                           {log.details}
