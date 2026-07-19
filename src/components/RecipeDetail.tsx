@@ -168,7 +168,7 @@ export default function RecipeDetail({ recipeId, onBack }: RecipeDetailProps) {
                   {items?.map((ing, idx) => {
                     const unitDef = findUnit(ing.unit || '');
                     const isCulinary = unitDef?.type === 'culinaria';
-                    const siResult = isCulinary ? convertToSI(ing.quantity, ing.unit) : null;
+                    const siResult = isCulinary ? convertToSI(ing.quantity, ing.unit, ing) : null;
                     
                     return (
                     <li key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center border-b border-outline-variant/10 pb-2 last:border-0">

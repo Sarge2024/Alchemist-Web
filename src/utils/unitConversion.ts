@@ -1,3 +1,5 @@
+import { getTablespoonWeightForGroup } from './densityReference';
+
 /**
  * Definições de unidades culinárias e SI para ingredientes.
  * Usado na Ficha Técnica e na conversão para a Lista de Compras.
@@ -107,8 +109,9 @@ export interface SIConversionResult {
  * Converte um valor + unidade culinária para unidade SI (g/ml/kg/l).
  * Arredonda para cima (Math.ceil) se precisão < 2 casas decimais.
  * Para unidades já SI, converte g→kg e ml→l quando valor >= 1000.
+ * Usa a densidade do ingrediente (se fornecida) para converter unidades culinárias de volume (ml) diretamente para gramas (g).
  */
-export function convertToSI(quantity: number, unitStr: string): SIConversionResult {
+export function convertToSI(quantity: number, unitStr: string, ingredient?: any): SIConversionResult {
   const def = findUnit(unitStr);
 
   let siValue: number;
@@ -123,6 +126,19 @@ export function convertToSI(quantity: number, unitStr: string): SIConversionResu
     // Converte culinária → SI base (g ou ml)
     siValue = quantity * def.siConversionFactor;
     siUnit = def.siUnit;
+    
+    // Se a unidade base original for ml (volume) e o usuário passou um ingrediente válido, calculamos a massa.
+    // 1 colher de sopa (cs) = 15 ml. O peso dela em gramas é obtido do ingredient.
+    if (siUnit === 'ml' && ingredient) {
+       const groupOrCat = ingredient.group || ingredient.category;
+       const tbspWeight = ingredient.tablespoonWeightG || getTablespoonWeightForGroup(groupOrCat);
+       
+       if (tbspWeight > 0) {
+         // Massa (g) = Volume (ml) * (Massa por colher / 15 ml)
+         siValue = siValue * (tbspWeight / 15);
+         siUnit = 'g'; // A unidade final vira peso
+       }
+    }
   } else {
     // Já é SI
     siValue = quantity;

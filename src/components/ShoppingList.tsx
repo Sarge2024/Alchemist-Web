@@ -192,7 +192,7 @@ export default function ShoppingList({ familyId, activeProfileId }: ShoppingList
         
         // Converte unidades culinárias para SI usando o utilitário centralizado
         // (arredondamento para cima é feito pelo convertToSI)
-        const siResult = convertToSI(item.quantity, item.unit);
+        const siResult = convertToSI(item.quantity, item.unit, item.base_data);
         const normQty = siResult.value;
         let normUnit = siResult.unit.toLowerCase().trim();
         
