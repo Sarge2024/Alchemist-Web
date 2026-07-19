@@ -83,7 +83,8 @@ export interface RecipeIngredient {
   category?: string;
   subcategory?: string;
   part?: string;
-  group?: string;
+  group?: string; // e.g. "Cereais e derivados", "Carnes e derivados"
+  tablespoonWeightG?: number;
 }
 
 export interface PreparationStep {
@@ -108,6 +109,7 @@ export interface Recipe {
   defaultDurabilityDays?: number;
   estimatedCost?: number;
   portionWeightG?: number; // Peso em gramas de 1 porção padrão (ex: 350 para prato feito, 240 para massas)
+  tablespoonWeightG?: number; // Peso em gramas de 1 colher de sopa do prato pronto
 }
 
 export interface PaginatedResponse<T> {

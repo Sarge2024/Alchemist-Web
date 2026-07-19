@@ -11,6 +11,7 @@ Este documento reúne o mapeamento completo da arquitetura, funcionalidades, int
 | **1.0**| 08/07/2026 | Antigravity | Inicialização do documento de especificações contendo o levantamento arquitetural, funcional e de integrações. Inclusão da especificação do Scanner de Pratos Multimodal. |
 | **1.1**| 09/07/2026 | Antigravity | Refatoração arquitetural do Backend (modularização de rotas Express), otimização de performance (Caching, Batching) e definição da integração de ingredientes via PostgreSQL do Dish Alchemists. |
 | **1.2**| 17/07/2026 | Antigravity | Atualização do BFF (server.ts) com remoção de respostas em mock (fail fast em produção). Implementação de Fallback Local no Motor Nutricional via Supabase. Aprimoramento da engine de normalização da Lista de Compras utilizando expressões regulares para capturar variações linguísticas nas unidades de medida e realizar agrupamento preciso. Adição de campo de busca integrado para seleção rápida de receitas nos Planners Semanais. |
+| **1.3**| 19/07/2026 | Antigravity | Adição do cálculo e exibição de equivalência em colheres de sopa (medidas caseiras) no momento de confirmação de consumo no Dashboard e persistência no log de histórico, suportado por utilitário de densidades alimentares. |
 
 ---
 
@@ -71,6 +72,7 @@ A aplicação está desenhada sob uma arquitetura de **BFF (Backend For Frontend
 *   **Componentes:**
     *   Gráfico de progresso calórico e de macronutrientes (Proteínas, Carboidratos, Gorduras).
     *   Listagem de refeições consumidas no dia (Planejadas vs. Ocasionais).
+    *   Confirmação de consumo com cálculo inteligente de equivalência em colheres de sopa baseado no grupo alimentar ou densidade cadastrada na receita/ingrediente.
     *   Exibição de alertas biométricos e de saúde.
     *   Histórico recente de peso.
 
@@ -118,6 +120,7 @@ A aplicação está desenhada sob uma arquitetura de **BFF (Backend For Frontend
 
 ### 3.8. Histórico de Consumo
 *   **Objetivo:** Listar logs passados e consolidados por dia para auditorias nutricionais.
+*   **Recursos:** Exibição do horário, alimento consumido, calorias, macronutrientes e a persistência da equivalência biométrica em medidas caseiras (ex: número de porções e de colheres de sopa) no log de detalhes.
 
 ---
 

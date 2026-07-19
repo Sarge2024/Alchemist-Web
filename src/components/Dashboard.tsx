@@ -5,6 +5,7 @@ import { Profile, Recipe, ConsumptionLogDoc } from "../types";
 import { consumptionService } from "../services/consumptionService";
 import { plannerService } from "../services/plannerService";
 import { getDefaultPortionWeight, portionsToFactor, formatPortions } from "../utils/portionDefaults";
+import { getRecipeTablespoonWeight } from "../utils/densityReference";
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -260,6 +261,11 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
         const logEntryCost = meal.estimatedCost ? (meal.estimatedCost * factor) : 0;
         const wasteCostVal = meal.estimatedCost ? Math.max(0, meal.estimatedCost - logEntryCost) : 0;
 
+        const portionInfo = meal.recipe ? getDefaultPortionWeight(meal.recipe) : { weightG: 350, label: 'Refeição completa' };
+        const weightConsumed = Math.round(portionInfo.weightG * portions);
+        const tbspWeight = getRecipeTablespoonWeight(meal.recipe);
+        const colheres = Math.round(weightConsumed / tbspWeight);
+
         const newEntry: any = {
           id: meal.id,
           time: meal.time,
@@ -273,7 +279,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
           consumedPortions: portions,
           consumedPercentage: Math.round(factor * 100), // Legacy compatibility
           wasteCost: wasteCostVal,
-          details: formatPortions(portions),
+          details: `${formatPortions(portions)} (~${colheres} colheres de sopa)`,
           status: status,
           plannedMealRef: mealId
         };
@@ -774,7 +780,7 @@ export default function Dashboard({ currentProfile, profiles, familyId, activePr
                     Ingerido: <span className="text-primary">{kcalConsumed} kcal</span>
                   </span>
                   <span className="font-sans text-[10px] text-scientific-gray mt-0.5">
-                    ≈ {weightConsumed}g consumidos
+                    ≈ {weightConsumed}g consumidos (~ {Math.round(weightConsumed / getRecipeTablespoonWeight(partialConsumptionMeal.recipe))} colheres de sopa)
                   </span>
                 </div>
                 {consumedPortions < 1 && (
